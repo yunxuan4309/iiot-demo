@@ -33,3 +33,11 @@ codesys/*.~u
 codesys/*precompilecache
 # ---- 本机凭据（CODESYS 软 PLC 账号密码）—— 绝不提交 ----
 docs/CODESYS/本机凭据-勿提交.md
+
+# ---- CODESYS 工程：只跟踪 .project，忽略编译产物与本地设置 ----
+codesys/*.bootinfo
+codesys/*.bootinfo_guids
+codesys/*.compileinfo
+codesys/*.precompilecache
+codesys/*.opt
+codesys/*.~u
