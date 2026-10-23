@@ -20,8 +20,13 @@
         "instances": [
           {
             "name": "instance0",
-            "program": "main",
-            "task": "task0"
+            "task": "task0",
+            "program": "main"
+          },
+          {
+            "name": "instance1",
+            "task": "task0",
+            "program": "temp_check"
           }
         ],
         "globalVariables": []
