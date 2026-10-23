@@ -1,0 +1,28 @@
+# ---- OpenPLC 编译产物 ----
+build/
+
+# ---- Java ----
+target/
+*.class
+
+# ---- IDE ----
+.idea/
+*.iml
+.vscode/
+
+# ---- 运行时数据 / 日志 ----
+data/
+*.log
+
+# ---- 内部资料：含岗位分析 / 公司名 / 面试话术 ----
+# ⚠️ 这两行是硬约束：绝不能进公开仓库
+#   计划书       —— 岗位分析 / 公司名 / 面试话术 / 简历策略
+#   CLAUDE.md    —— 云服务器 IP / CoolShark 仓库路径 / 工作区规则
+工业软件Demo-实施计划.md
+CLAUDE.md
+
+# ---- 本地临时 ----
+*.tmp
+*.bak
+Thumbs.db
+desktop.ini
