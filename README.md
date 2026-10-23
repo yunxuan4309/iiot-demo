@@ -10,8 +10,10 @@
 |---|---|
 | 仿真 Modbus TCP 从站（4 点位、可多设备、可随时停掉） | ✅ 可用 |
 | 采集端探测工具（读寄存器 / 猜字序 / 读开关量 / 写线圈） | ✅ 可用 |
-| OpenPLC 梯形图工程（LD 跑通） | ✅ 见 `pous/programs/main.ld` |
-| 采集调度（`DeviceDriver` + 虚拟线程 + 质量码） | 🚧 进行中 |
+| 单设备持续采集（**点表配置化** + 质量码 `GOOD`/`STALE`/`BAD`） | ✅ 可用 |
+| `DeviceDriver` 抽象层 + `TcpModbusDriver`（按区域合并读） | ✅ 可用 |
+| 多设备 + JDK 21 虚拟线程 + 超时 / 退避 / 设备级隔离 | 🚧 下一步 |
+| OpenPLC 梯形图工程（LD 跑通，ST/FBD 待补） | ✅ 部分 |
 | 时序库（TDengine / QuestDB） | ⬜ 未开始 |
 | Spring Boot 接口 + ECharts 页面 | ⬜ 未开始 |
 | 真实 RS485 传感器接入 | ⬜ 等硬件到货 |
@@ -64,7 +66,42 @@ collector\run-probe.cmd --port 1502 --write-motor true   # 写线圈 FC05 并读
 
 > 控制台显示中文需要 UTF-8：`run-slave.cmd` / `run-probe.cmd` 里已经 `chcp 65001` 并给 JVM 加了 `-Dstdout.encoding=UTF-8`。
 
-**3) 演练设备离线**：在那个窗口按 Ctrl+C，再跑一次 `run-probe.cmd` —— 应当看到"连接被拒绝 + 该打 BAD/STALE 而不是补 0"的提示（exit 3）。
+**3) 持续采集（点表驱动，看质量码）**：
+
+```powershell
+collector\run-collect.cmd --cycles 5
+collector\run-collect.cmd --points D:\my-points.properties --device sim-02
+```
+
+```
+[19:33:22.282] sim-01   GOOD  temperature=62.18°C        runtime_hours=1234.00h       motor_running=false          alarm=false
+[19:33:23.733] sim-01   STALE temperature=62.18(STALE)°C runtime_hours=1234.00(STALE)h motor_running=false(STALE) alarm=false(STALE)
+           ↳ 读失败：... Connection refused: getsockopt
+           ↳ 值保留上次、标 STALE（不是 0）；上次好值 19:33:22.282
+```
+
+**4) 演练设备离线**：在从站那个窗口按 Ctrl+C（或直接关掉），采集端下一轮就会变 `STALE` —— 值保留上次、质量码标明"这是旧的"，**不会补 0**。
+
+### 点表：字序、类型、偏移都在配置里
+
+真设备不会告诉你它用 CDAB 还是 ABCD，所以这些**现场的私有约定**必须能改配置而不用改代码。
+默认点表在 [collector/src/main/resources/points.properties](<collector/src/main/resources/points.properties>)：
+
+```properties
+device.sim-01.host=127.0.0.1
+device.sim-01.port=1502
+device.sim-01.unitId=1
+device.sim-01.periodMillis=1000
+device.sim-01.points=temperature,runtime_hours,motor_running,alarm
+
+device.sim-01.point.temperature.area=holding
+device.sim-01.point.temperature.offset=0        # 0 基；惯用编号 40001
+device.sim-01.point.temperature.type=float32
+device.sim-01.point.temperature.order=CDAB      # 换一台表只改这一行
+device.sim-01.point.temperature.unit=°C
+```
+
+验证配置真的生效（实测）：从站 `--base-temp 25` 时读到 **25.06℃**；仅把 `order` 改成 `ABCD`，同一台设备立刻变成 **-1.52e19℃**。
 
 ## 目录
 

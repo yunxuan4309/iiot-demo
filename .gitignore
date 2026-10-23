@@ -26,3 +26,8 @@ CLAUDE.md
 *.bak
 Thumbs.db
 desktop.ini
+
+# ---- CODESYS 工程的机器相关产物（不要进库）----
+codesys/*.opt
+codesys/*.~u
+codesys/*precompilecache
