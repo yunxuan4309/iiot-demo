@@ -27,6 +27,11 @@
             "name": "instance1",
             "task": "task0",
             "program": "temp_check"
+          },
+          {
+            "name": "instance2",
+            "task": "task0",
+            "program": "temp_fbd"
           }
         ],
         "globalVariables": []
@@ -37,6 +42,9 @@
       "pous": {
         "main": [
           "xStart"
+        ],
+        "temp_check": [
+          "rTemp"
         ]
       }
     }
