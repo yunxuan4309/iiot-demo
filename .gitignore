@@ -31,3 +31,5 @@ desktop.ini
 codesys/*.opt
 codesys/*.~u
 codesys/*precompilecache
+# ---- 本机凭据（CODESYS 软 PLC 账号密码）—— 绝不提交 ----
+docs/CODESYS/本机凭据-勿提交.md
