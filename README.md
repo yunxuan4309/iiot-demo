@@ -263,4 +263,5 @@ project.json          OpenPLC 工程配置（tasks + instances）
 | [docs/OpenPLC/三语言进度与踩坑.md](docs/OpenPLC/三语言进度与踩坑.md) | IEC 61131-3 三种语言（LD/ST/FBD）在同一工程里跑通 |
 | [docs/双工具同一段ST-对比验证.md](docs/双工具同一段ST-对比验证.md) | 同一段 ST 在 OpenPLC 与 CODESYS 上分别编译运行 |
 | [docs/CODESYS/环境搭建与踩坑.md](docs/CODESYS/环境搭建与踩坑.md) | 工业软件工具链安装 + 连通/会话/认证三层排障 |
+| [docs/CODESYS/LD与FBD-怎么发挥作用.md](docs/CODESYS/LD与FBD-怎么发挥作用.md) | ⭐ **同一逻辑用 ST/LD/FBD 三种语言各写一遍，同时跑在一台 PLC 里**；LD 的能量流 / FBD 的信号流；**变量名不同但地址相同 = 共享内存** |
 | [docs/CODESYS/Modbus从站接入与实测.md](docs/CODESYS/Modbus从站接入与实测.md) | ⭐ **CODESYS 当 Modbus 从站，采集端零代码改动读它**：八个坑（I/O 地址是设备分配的 / 字序歧义 / 主从翻译陷阱…）+ 现场排查顺序 |
