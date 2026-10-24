@@ -236,6 +236,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 | **TDengine** | 工业圈常见；超级表 + 子表天然贴合「设备 × 点位」；单机轻量 |
 | **REST 而非 JDBC** | 免 native 库、可跨 WSL / SSH 隧道；查询返回自带 `column_meta`，直接映射给前端 |
 | **ECharts 本地副本** | 离线可跑，不依赖 CDN |
+| **CODESYS 软 PLC** | 真运行时当 Modbus 从站（`%QW0`→输入寄存器、`%QX20.0`→离散输入）；**ST / LD / FBD 三种语言各写一遍同一逻辑**，在线验证三者同真同假 |
 | **Spring Boot 3.2.5** | 与本人另一个项目对齐，便于复用本地依赖缓存（离线也能构建） |
 
 ---
@@ -243,7 +244,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 ## 边界（诚实说明）
 
 - **不是生产系统**：单机、无认证、无高可用、无联锁
-- **真传感器尚未接入**：目前用仿真从站验证协议链路；`RtuModbusDriver` 接口已留，硬件到货后只换实现
+- **真传感器尚未接入**（等快递）：但已验证**两类数据源** —— 自写 Modbus 仿真从站 + **CODESYS 软 PLC 真实运行时**（采集端零代码改动）；`RtuModbusDriver` 已实现，硬件到货只换点表
 - **北向 MQTT 已实现**：`iiot/{device}/{point}`，QoS 1 + retain，Mosquitto 跑在 WSL；**但只做了"分发"**，没做认证/授权（demo 用 `allow_anonymous`，生产必须开）
 - **告警只做了判断，没做通知**：`AlarmEngine` 已实现**持续时间去抖 + 回差 + 分级 + 质量码门禁**，并用 A/B 实测过（86 条 → 12 条，压掉 86%）；但**通知通道（短信/企微/邮件）与同源告警合并没做**
 - **只有 4 个点位**：够验证链路，不够覆盖真实产线（一台设备几十上百点位）
