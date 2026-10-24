@@ -21,17 +21,27 @@ public final class TempSignal {
     private static final double DRIFT_PERIOD_SECONDS = 180.0;
     /** 低通系数：越大越"迟钝"，越像大热容的工业设备。 */
     private static final double SMOOTHING = 0.95;
-    /** 单次尖峰的概率。 */
-    private static final double SPIKE_PROBABILITY = 0.005;
+    /** 默认单次尖峰的概率（0.5%，像真实干扰的频率）。 */
+    public static final double DEFAULT_SPIKE_PROBABILITY = 0.005;
 
     private final Random random = new Random(20261023L);
     private final double base;
+    private final double spikeProbability;
     private final long startedAtNanos = System.nanoTime();
 
     private double value;
 
     public TempSignal(double baseCelsius) {
+        this(baseCelsius, DEFAULT_SPIKE_PROBABILITY);
+    }
+
+    /**
+     * @param spikeProbability 单点尖峰概率。演示「告警去抖」时调高（如 0.10），
+     *                         让信号频繁短暂越限 —— 这正是现场"毛刺触发假告警"的形状。
+     */
+    public TempSignal(double baseCelsius, double spikeProbability) {
         this.base = baseCelsius;
+        this.spikeProbability = spikeProbability;
         this.value = baseCelsius;
     }
 
@@ -44,9 +54,14 @@ public final class TempSignal {
 
         value = SMOOTHING * value + (1 - SMOOTHING) * target;
 
-        if (random.nextDouble() < SPIKE_PROBABILITY) {
+        // ⚠️ 尖峰只作用在【读数】上，不写回物理状态。
+        // 真实的传感器毛刺（干扰 / 接触不良）是"这一次读数错了"，不是"温度真跳了 10℃"；
+        // 若把尖峰加进滤波器状态，高频尖峰会累积，让值一路漂上去 ——
+        // 实测用 10% 尖峰概率时值会稳定在 ~92℃，那就不再是"毛刺"，而是"真的超温"了，
+        // 告警去抖也就失去了可演示的对象。
+        if (random.nextDouble() < spikeProbability) {
             double magnitude = 6.0 + random.nextDouble() * 6.0;
-            value += random.nextBoolean() ? magnitude : -magnitude;
+            return value + (random.nextBoolean() ? magnitude : -magnitude);
         }
         return value;
     }

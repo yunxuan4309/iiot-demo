@@ -51,6 +51,8 @@ public final class SimSlaveMain {
         WordOrder tempOrder = WordOrder.parse(stringArg(args, "--temp-order", "CDAB"));
         WordOrder hoursOrder = WordOrder.parse(stringArg(args, "--hours-order", "ABCD"));
         double baseTemperature = doubleArg(args, "--base-temp", 62.0);
+        // 尖峰概率：演示「告警去抖」时调高（如 0.10），让信号频繁短暂越限
+        double spikeProbability = doubleArg(args, "--spike-prob", 0.005);
         boolean quiet = hasFlag(args, "--quiet");
 
         if (deviceCount <= 0) {
@@ -73,7 +75,7 @@ public final class SimSlaveMain {
             // 同一个厂房里 100 个测点不会"编号越大越热"。线性递增到第 83 台就冲到 120℃，
             // 会被点表的量程校验判成 BAD（校验没错，是仿真模型不真实）。
             double temperatureSpread = (i % 40) * 0.7;
-            SimDevice device = new SimDevice(firstUnitId + i, tempOrder, hoursOrder, baseTemperature + temperatureSpread);
+            SimDevice device = new SimDevice(firstUnitId + i, tempOrder, hoursOrder, baseTemperature + temperatureSpread, spikeProbability);
             slave.addProcessImage(firstUnitId + i, device.image());
             devices.add(device);
         }
@@ -122,6 +124,7 @@ public final class SimSlaveMain {
                   --temp-order <o>    temperature 的字序，默认 CDAB（国内仪表常见）
                   --hours-order <o>   runtime_hours 的字序，默认 ABCD
                   --base-temp <f>     温度基准值，默认 62.0（想演练告警可设 79）
+                  --spike-prob <f>    单点尖峰概率，默认 0.005；演示告警去抖时调高到 0.10
                   --quiet             不打印每周期状态
                   --help              显示本帮助
 

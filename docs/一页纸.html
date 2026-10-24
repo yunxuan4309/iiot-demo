@@ -290,7 +290,7 @@
   </div></div>
   <div class="pit"><div class="n">7</div><div class="body">
     <span class="nm">告警泛滥</span>
-    <div class="ds">10 分钟 836 个越限采样点 vs <b>仅 10 次真实事件 = 放大 83.6 倍</b>；解法＝去抖＋回差＋分级</div>
+    <div class="ds"><b>已实现</b>去抖＋回差＋分级＋质量码门禁；A/B 实测 <b>86 条 → 12 条（压掉 86%）</b></div>
   </div></div>
 </div>
 
@@ -312,7 +312,7 @@
   <b>不是生产系统</b>（单机 · 无认证 · 无高可用 · 无联锁）
   <span>│</span> <b>真传感器尚未接入</b>：当前用仿真从站验证协议链路，<code>RtuModbusDriver</code> 接口已留
   <span>│</span> <b>北向 MQTT 未实现</b>：页面走 HTTP，架构预留 <code>iiot/{device}/{point}</code> topic 规范
-  <span>│</span> <b>告警模块未实现</b>：坑 7 只有设计（去抖＋回差＋分级）
+  <span>│</span> <b>告警只做判断不做通知</b>：引擎已实现并 A/B 验证，但短信/企微与同源合并未做
   <span>│</span> 只有 4 个点位，够验证链路、不够覆盖真实产线
 </div>
 

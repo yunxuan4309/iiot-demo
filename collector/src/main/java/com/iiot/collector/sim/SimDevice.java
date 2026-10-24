@@ -53,10 +53,18 @@ public final class SimDevice {
     private double temperatureC;
 
     public SimDevice(int unitId, WordOrder tempOrder, WordOrder hoursOrder, double baseTemperatureC) {
+        this(unitId, tempOrder, hoursOrder, baseTemperatureC, TempSignal.DEFAULT_SPIKE_PROBABILITY);
+    }
+
+    /**
+     * @param spikeProbability 尖峰概率 —— 演示告警去抖时调高，让信号频繁短暂越限
+     */
+    public SimDevice(int unitId, WordOrder tempOrder, WordOrder hoursOrder,
+                     double baseTemperatureC, double spikeProbability) {
         this.unitId = unitId;
         this.tempOrder = tempOrder;
         this.hoursOrder = hoursOrder;
-        this.temp = new TempSignal(baseTemperatureC);
+        this.temp = new TempSignal(baseTemperatureC, spikeProbability);
         this.temperatureC = baseTemperatureC;
 
         this.image = new SimpleProcessImage(unitId);

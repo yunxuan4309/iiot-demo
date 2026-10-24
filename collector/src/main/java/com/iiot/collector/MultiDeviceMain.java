@@ -9,13 +9,16 @@ import com.iiot.collector.core.PointTableLoader;
 import com.iiot.collector.core.PointValue;
 import com.iiot.collector.core.TelemetryRepository;
 import com.iiot.collector.driver.TcpModbusDriver;
+import com.iiot.collector.core.AlarmEngine;
 import com.iiot.collector.repo.CountingTelemetryRepository;
 import com.iiot.collector.repo.TdengineTelemetryRepository;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -88,6 +91,21 @@ public final class MultiDeviceMain {
         int pointsPerDevice = configs.get(0).points().size();
         CollectStats stats = new CollectStats(pointsPerDevice, 200_000);
         TelemetryRepository repository = createRepository(store, tdUrl, tdDb, tdUser, tdPass);
+        // 告警引擎：--alarm 才启用（默认关，避免影响纯性能测试的基线数字）
+        AlarmEngine alarms = createAlarmEngine(args);
+        // A/B 模式：同一批采样点同时喂给「去抖」和「不去抖」两个引擎 ——
+        // 保证对比的是"配置差异"，不是"两次运行的信号差异"。
+        final AlarmEngine strictAlarms;
+        if (alarms != null && hasFlag(args, "--alarm-ab")) {
+            strictAlarms = strictAlarmEngine();
+            System.out.println("A/B 模式：同一批数据同时喂给『去抖(5s+回差5℃)』与『不去抖』两个引擎");
+        } else {
+            strictAlarms = null;
+        }
+        if (alarms != null) {
+            System.out.println("告警引擎已启用 · 规则点位 " + alarms.rules().keySet()
+                    + "（去抖 + 回差 + 分级 + 质量码门禁）");
+        }
 
         System.out.printf("多设备采集启动：%d 台 × %d 点 · 周期 %d ms · 读超时 %d ms%n",
                 configs.size(), pointsPerDevice,
@@ -112,8 +130,8 @@ public final class MultiDeviceMain {
         for (DeviceConfig config : configs) {
             executor.submit(() -> {
                 try {
-                    runDevice(config, repository, stats, timeoutMillis, maxCycles, deadline, intervalOverride,
-                            stop, echo);
+                    runDevice(config, repository, stats, alarms, strictAlarms, timeoutMillis, maxCycles,
+                            deadline, intervalOverride, stop, echo);
                 } finally {
                     allDone.countDown();
                 }
@@ -146,12 +164,69 @@ public final class MultiDeviceMain {
         if (repository instanceof TdengineTelemetryRepository tdengine) {
             System.out.println(tdengine.summaryLine());
         }
+        if (alarms != null) {
+            System.out.print(alarms.report());
+        }
+        if (strictAlarms != null) {
+            System.out.println();
+            System.out.println("══════════ A/B 对比（同一批采样点，只改配置）══════════");
+            System.out.printf("  不去抖（持续 0 ms、回差 0℃）   → %,d 条告警%n", strictAlarms.raisedCount());
+            System.out.printf("  去抖+回差（持续 5 s、回差 5℃） → %,d 条告警%n", alarms.raisedCount());
+            long before = strictAlarms.raisedCount();
+            long after = alarms.raisedCount();
+            if (before > 0) {
+                System.out.printf("  ★ 减少 %,d 条（压掉 %.1f%%）%n",
+                        before - after, 100.0 * (before - after) / before);
+            } else {
+                System.out.println("  （本次没有告警，无法比较）");
+            }
+            System.out.println("══════════════════════════════════════════════════════");
+        }
+    }
+
+    /** 对照组：完全不设防（持续 0ms、回差 0）—— 等价于"每个越限采样点都报警"。 */
+    private static AlarmEngine strictAlarmEngine() {
+        Properties props = new Properties();
+        props.setProperty("alarm.temperature.warningHigh", "80");
+        props.setProperty("alarm.temperature.criticalHigh", "85");
+        props.setProperty("alarm.temperature.recoverOffset", "0");
+        props.setProperty("alarm.temperature.durationMillis", "0");
+        return AlarmEngine.fromProperties(props);
+    }
+
+    /**
+     * 构造告警引擎。
+     *
+     * <p>{@code --alarm} 用内置规则（classpath 里的 {@code alarms.properties}）；
+     * {@code --alarm-rules <file>} 用外部文件 —— 现场改阈值不改代码，也方便做 A/B 对比
+     * （同一批数据，一份"不去抖"、一份"去抖+回差"，直接看告警条数差多少）。
+     */
+    private static AlarmEngine createAlarmEngine(String[] args) {
+        String rulesFile = stringArg(args, "--alarm-rules", null);
+        if (rulesFile == null && !hasFlag(args, "--alarm")) {
+            return null;
+        }
+        AlarmEngine engine;
+        if (rulesFile != null) {
+            try {
+                engine = AlarmEngine.load(Path.of(rulesFile));
+            } catch (IOException e) {
+                throw new IllegalArgumentException(
+                        "读取告警规则失败: " + rulesFile + " —— " + e.getMessage(), e);
+            }
+        } else {
+            engine = AlarmEngine.loadDefault();
+        }
+        if (engine != null) {
+            System.out.println("告警引擎已启用 · 规则点位 " + engine.rules().keySet()
+                    + "（去抖 + 回差 + 分级 + 质量码门禁）");
+        }
+        return engine;
     }
 
     /** 按 {@code --store} 选存储实现 —— 换库只改这一处，采集逻辑一行不动。 */
     private static TelemetryRepository createRepository(String store, String url, String db,
-                                                       String user, String password) {
-        return switch (store.toLowerCase()) {
+                                                       String user, String password) {        return switch (store.toLowerCase()) {
             case "tdengine", "td" -> new TdengineTelemetryRepository(url, db, user, password);
             case "counting", "count", "none" -> new CountingTelemetryRepository();
             default -> throw new IllegalArgumentException(
@@ -179,6 +254,8 @@ public final class MultiDeviceMain {
     private static void runDevice(DeviceConfig config,
                                   TelemetryRepository repository,
                                   CollectStats stats,
+                                  AlarmEngine alarms,
+                                  AlarmEngine strictAlarms,
                                   int timeoutMillis,
                                   int maxCycles,
                                   long deadline,
@@ -201,6 +278,21 @@ public final class MultiDeviceMain {
                 boolean commOk = sampler.lastError() == null;
                 repository.write(batch);
                 stats.record(config.deviceId(), batch, latencyMicros, commOk, sampler.lastRangeError());
+
+                // 告警判断：注意只对 GOOD 数据判（质量码门禁在引擎内部）
+                if (alarms != null) {
+                    for (PointValue value : batch) {
+                        for (AlarmEngine.Event event : alarms.onSample(value)) {
+                            synchronized (System.out) {
+                                System.out.println(event.format());
+                            }
+                        }
+                        // A/B：同一批数据也喂给"不去抖"的引擎（不打印，只计数）
+                        if (strictAlarms != null) {
+                            strictAlarms.onSample(value);
+                        }
+                    }
+                }
 
                 if (echo) {
                     printBatch(config, batch, sampler, latencyMicros);
@@ -265,6 +357,11 @@ public final class MultiDeviceMain {
                   --timeout <ms>       单次读超时，默认 2000
                   --report-every <sec> 进度打印间隔，默认 5
                   --verbose            设备多时也逐台打印
+
+                告警（去抖 + 回差 + 分级 + 质量码门禁）：
+                  --alarm              启用告警引擎（规则见 resources/alarms.properties）
+                                       ⚠️ 只对 GOOD 数据判告警；STALE/BAD 一律不报
+                  --alarm-rules <file> 用外部规则文件（现场改阈值 / 做 A/B 对比）
 
                 存储（--store）：
                   counting             不落盘，只计数（默认，用来建立采集端基线）
