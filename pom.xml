@@ -14,6 +14,7 @@
 
     <modules>
         <module>collector</module>
+        <module>platform</module>
     </modules>
 
     <properties>
@@ -23,10 +24,19 @@
 
         <j2mod.version>3.4.0</j2mod.version>
         <slf4j.version>2.0.9</slf4j.version>
+        <!-- 与 CoolShark 对齐，便于复用本地 .m2 缓存；离线构建也能过 -->
+        <spring-boot.version>3.2.5</spring-boot.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.ghgande</groupId>
                 <artifactId>j2mod</artifactId>
@@ -47,6 +57,13 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.13.0</version>
+                    <configuration>
+                        <!-- Spring MVC 的 @RequestParam / @PathVariable 不带名字时，
+                             需要 class 文件保留形参名，否则运行期报
+                             "Name for argument of type [String] not specified"。
+                             用 spring-boot-starter-parent 时它默认开，我们自己写父 POM 就得显式开。 -->
+                        <parameters>true</parameters>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -57,6 +74,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
                     <version>3.5.3</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
                 </plugin>
             </plugins>
         </pluginManagement>

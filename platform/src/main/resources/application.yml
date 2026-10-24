@@ -1,0 +1,32 @@
+server:
+  port: 8080
+  compression:
+    enabled: true
+
+spring:
+  application:
+    name: iiot-platform
+  jackson:
+    default-property-inclusion: non_null
+
+# 监测平台只读 TDengine，不连接任何设备
+iiot:
+  tdengine:
+    url: http://localhost:6041
+    database: iiot
+    user: root
+    password: taosdata
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.iiot.platform: DEBUG

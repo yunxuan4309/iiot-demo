@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工业设备在线监测</title>
+  <script src="echarts.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2129;
+      --panel-2: #212b36;
+      --line: #2a3644;
+      --text: #d8e0e8;
+      --dim: #7b8a99;
+      --good: #3ddc84;
+      --stale: #ffb020;
+      --bad: #ff5252;
+      --accent: #4a9eff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .5px; }
+    header .sub { color: var(--dim); font-size: 12px; }
+    header .spacer { flex: 1; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); display: inline-block; margin-right: 6px; }
+    .dot.ok { background: var(--good); box-shadow: 0 0 8px var(--good); }
+    .dot.err { background: var(--bad); box-shadow: 0 0 8px var(--bad); }
+    .pill { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+
+    #err {
+      display: none; margin: 12px 20px; padding: 12px 16px; border-radius: 8px;
+      background: rgba(255,82,82,.12); border: 1px solid rgba(255,82,82,.4); color: #ffb4b4;
+      white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px;
+    }
+
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px 0; }
+    .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+    .kpi .label { color: var(--dim); font-size: 12px; }
+    .kpi .value { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    .kpi .value small { font-size: 13px; color: var(--dim); font-weight: 400; margin-left: 4px; }
+
+    .main { display: grid; grid-template-columns: 380px 1fr; gap: 12px; padding: 12px 20px 20px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .panel h2 {
+      font-size: 13px; font-weight: 600; margin: 0; padding: 10px 14px;
+      border-bottom: 1px solid var(--line); color: var(--dim); letter-spacing: .5px;
+    }
+    .panel .body { padding: 10px 14px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; color: var(--dim); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    td { padding: 6px 8px; border-bottom: 1px solid rgba(42,54,68,.5); font-variant-numeric: tabular-nums; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: var(--panel-2); }
+    tbody tr.active { background: rgba(74,158,255,.14); }
+    .q { font-size: 11px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+    .q.GOOD { color: #072; background: rgba(61,220,132,.18); }
+    .q.STALE { color: var(--stale); background: rgba(255,176,32,.15); }
+    .q.BAD { color: var(--bad); background: rgba(255,82,82,.15); }
+
+    #line { width: 100%; height: 380px; }
+    .charts { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
+    #pie { width: 100%; height: 380px; }
+
+    footer { color: var(--dim); font-size: 12px; padding: 0 20px 24px; }
+    footer code { color: var(--text); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>工业设备在线监测</h1>
+  <span class="sub">Modbus → 采集 → TDengine → 本页</span>
+  <span class="spacer"></span>
+  <span class="pill"><span class="dot" id="status"></span><span id="statusText">连接中…</span></span>
+  <span class="pill" id="clock">--:--:--</span>
+</header>
+
+<div id="err"></div>
+
+<section class="kpis">
+  <div class="kpi"><div class="label">设备数</div><div class="value" id="kpiDevices">–</div></div>
+  <div class="kpi"><div class="label">累计点数</div><div class="value" id="kpiPoints">–</div></div>
+  <div class="kpi"><div class="label">GOOD 占比</div><div class="value" id="kpiGood">–</div></div>
+  <div class="kpi"><div class="label">数据最新时刻</div><div class="value" id="kpiLatest" style="font-size:16px">–</div></div>
+</section>
+
+<section class="main">
+  <div class="panel">
+    <h2>设备列表（点一行看曲线）</h2>
+    <div class="body" style="max-height:520px; overflow:auto;">
+      <table>
+        <thead>
+          <tr><th>设备</th><th>温度</th><th>状态</th><th>质量</th></tr>
+        </thead>
+        <tbody id="deviceRows">
+          <tr><td colspan="4" style="color:var(--dim)">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="panel">
+      <h2 id="lineTitle">温度时序</h2>
+      <div id="line"></div>
+    </div>
+    <div class="panel">
+      <h2>质量码分布</h2>
+      <div id="pie"></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  窗口 = 最近 <code id="winMin">10</code> 分钟 · 每 3 秒刷新 ·
+  数据来自 TDengine（UTC 存储，页面按浏览器本地时区显示）
+</footer>
+
+<script>
+const API = '';
+const REFRESH_MS = 3000;
+const WINDOW_MIN = 10;
+
+let selectedDevice = null;
+let lineChart = null;
+let pieChart = null;
+
+const $ = id => document.getElementById(id);
+
+function setStatus(ok, text) {
+  $('status').className = 'dot ' + (ok ? 'ok' : 'err');
+  $('statusText').textContent = text;
+}
+
+function showError(msg) {
+  const box = $('err');
+  if (!msg) { box.style.display = 'none'; box.textContent = ''; return; }
+  box.style.display = 'block';
+  box.textContent = msg;
+}
+
+/** TDengine 返回的是 UTC ISO（带 Z）；new Date() 会按浏览器时区渲染成当地时间。 */
+function localTime(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function localDateTime(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getMonth()+1}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+async function getJson(path) {
+  const r = await fetch(API + path, { cache: 'no-store' });
+  if (!r.ok) {
+    let detail = '';
+    try { const j = await r.json(); detail = j.detail || j.message || JSON.stringify(j); } catch (e) { detail = await r.text(); }
+    throw new Error(`HTTP ${r.status}  ${path}\n${detail}`);
+  }
+  return r.json();
+}
+
+async function refreshOverview() {
+  const o = await getJson('/api/overview');
+  $('kpiDevices').innerHTML = (o.deviceCount ?? 0) + '<small>台</small>';
+  $('kpiPoints').textContent = (o.totalPoints ?? 0).toLocaleString();
+  $('kpiGood').innerHTML = (o.goodRate == null ? '–' : o.goodRate.toFixed(2) + '<small>%</small>');
+  $('kpiLatest').textContent = localDateTime(o.latestTs);
+
+  pieChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, textStyle: { color: '#7b8a99' } },
+    series: [{
+      type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
+      itemStyle: { borderColor: '#1a2129', borderWidth: 2 },
+      label: { color: '#d8e0e8', formatter: '{b}\n{c}' },
+      data: Object.entries(o.quality || {}).map(([k, v]) => ({
+        name: k, value: v,
+        itemStyle: { color: k === 'GOOD' ? '#3ddc84' : k === 'STALE' ? '#ffb020' : '#ff5252' }
+      }))
+    }]
+  }, true);
+
+  return o;
+}
+
+async function refreshLatest() {
+  const rows = await getJson('/api/latest');
+  const tbody = $('deviceRows');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--dim)">暂无数据 —— 先跑采集端</td></tr>';
+    return;
+  }
+  if (!selectedDevice) selectedDevice = rows[0].device;
+
+  tbody.innerHTML = rows.map(r => {
+    const t = r.points.temperature || {};
+    const a = r.points.alarm || {};
+    const m = r.points.motor_running || {};
+    const alarmOn = Number(a.val) > 0;
+    const motorOn = Number(m.val) > 0;
+    const state = alarmOn ? '<span style="color:#ff5252">报警</span>'
+                : motorOn ? '<span style="color:#3ddc84">运行</span>' : '<span style="color:#7b8a99">停机</span>';
+    const q = t.quality || '–';
+    return `<tr data-device="${r.device}" class="${r.device === selectedDevice ? 'active' : ''}">
+      <td>${r.device}</td>
+      <td>${t.val == null ? '–' : Number(t.val).toFixed(2)} ℃</td>
+      <td>${state}</td>
+      <td><span class="q ${q}">${q}</span></td>
+    </tr>`;
+  }).join('');
+
+  for (const tr of tbody.querySelectorAll('tr[data-device]')) {
+    tr.onclick = () => {
+      selectedDevice = tr.dataset.device;
+      for (const other of tbody.querySelectorAll('tr')) other.classList.remove('active');
+      tr.classList.add('active');
+      refreshSeries();
+    };
+  }
+}
+
+async function refreshSeries() {
+  if (!selectedDevice) return;
+  const s = await getJson(`/api/series?device=${encodeURIComponent(selectedDevice)}&point=temperature&minutes=${WINDOW_MIN}`);
+  $('lineTitle').textContent = `${selectedDevice} · 温度时序（最近 ${s.minutes} 分钟，${s.count} 点）`;
+
+  const times = s.points.map(p => localTime(p[0]));
+  const values = s.points.map(p => p[1] == null ? null : Number(p[1]));
+  const qualities = s.points.map(p => p[2]);
+
+  lineChart.setOption({
+    grid: { left: 56, right: 24, top: 24, bottom: 40 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: params => {
+        const i = params[0].dataIndex;
+        return `${times[i]}<br/>温度 <b>${values[i] == null ? '–' : values[i].toFixed(2)}</b> ℃<br/>质量 ${qualities[i]}`;
+      }
+    },
+    xAxis: {
+      type: 'category', data: times, boundaryGap: false,
+      axisLine: { lineStyle: { color: '#2a3644' } },
+      axisLabel: { color: '#7b8a99', interval: Math.max(0, Math.floor(times.length / 8)) }
+    },
+    yAxis: {
+      type: 'value', scale: true, name: '℃',
+      nameTextStyle: { color: '#7b8a99' },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: 'rgba(42,54,68,.6)' } },
+      axisLabel: { color: '#7b8a99' }
+    },
+    series: [{
+      type: 'line', data: values, smooth: true, showSymbol: false,
+      lineStyle: { width: 2, color: '#4a9eff' },
+      areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(74,158,255,.35)' },
+        { offset: 1, color: 'rgba(74,158,255,0)' }
+      ])},
+      // 用 markLine 标出报警阈值：一眼看出"有没有越线"
+      markLine: {
+        silent: true, symbol: 'none',
+        label: { formatter: '报警阈值 80℃', color: '#ff5252', position: 'insideEndTop' },
+        lineStyle: { color: '#ff5252', type: 'dashed', width: 1 },
+        data: [{ yAxis: 80 }]
+      }
+    }]
+  }, true);
+}
+
+async function tick() {
+  $('clock').textContent = new Date().toLocaleTimeString();
+  try {
+    await refreshOverview();
+    await refreshLatest();
+    await refreshSeries();
+    setStatus(true, '实时');
+    showError('');
+  } catch (e) {
+    setStatus(false, '异常');
+    showError(String(e.message || e));
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  lineChart = echarts.init($('line'), null, { renderer: 'canvas' });
+  pieChart = echarts.init($('pie'), null, { renderer: 'canvas' });
+  window.addEventListener('resize', () => { lineChart.resize(); pieChart.resize(); });
+  $('winMin').textContent = WINDOW_MIN;
+  tick();
+  setInterval(tick, REFRESH_MS);
+});
+</script>
+</body>
+</html>
