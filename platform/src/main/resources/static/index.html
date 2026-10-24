@@ -47,8 +47,8 @@
     .kpi .value { font-size: 24px; font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
     .kpi .value small { font-size: 13px; color: var(--dim); font-weight: 400; margin-left: 4px; }
 
-    .main { display: grid; grid-template-columns: 380px 1fr; gap: 12px; padding: 12px 20px 20px; }
-    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .main { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 12px; padding: 12px 20px 20px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; }
     .panel h2 {
       font-size: 13px; font-weight: 600; margin: 0; padding: 10px 14px;
       border-bottom: 1px solid var(--line); color: var(--dim); letter-spacing: .5px;
@@ -67,8 +67,22 @@
     .q.BAD { color: var(--bad); background: rgba(255,82,82,.15); }
 
     #line { width: 100%; height: 380px; }
-    .charts { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
+    .charts { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
     #pie { width: 100%; height: 380px; }
+
+    /*
+     * 响应式：窗口不够宽时，1fr 会被压成 0 —— 曲线面板会"塌成一条竖线"（真实踩过）。
+     * 所以：< 1180px 把饼图挪到曲线下面；< 900px 整个主区改成单列。
+     */
+    @media (max-width: 1180px) {
+      .charts { grid-template-columns: minmax(0, 1fr); }
+      #pie { height: 260px; }
+    }
+    @media (max-width: 900px) {
+      .main { grid-template-columns: minmax(0, 1fr); }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #line { height: 300px; }
+    }
 
     footer { color: var(--dim); font-size: 12px; padding: 0 20px 24px; }
     footer code { color: var(--text); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
