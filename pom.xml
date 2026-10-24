@@ -24,7 +24,7 @@
 
         <j2mod.version>3.4.0</j2mod.version>
         <slf4j.version>2.0.9</slf4j.version>
-        <!-- 与 CoolShark 对齐，便于复用本地 .m2 缓存；离线构建也能过 -->
+        <!-- 与本人另一个 Spring Cloud 项目对同一版本，便于复用本地 .m2 缓存；离线构建也能过 -->
         <spring-boot.version>3.2.5</spring-boot.version>
     </properties>
 
