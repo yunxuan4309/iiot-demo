@@ -18,6 +18,9 @@ pous/programs/*.st linguist-detectable=false
 # 产生一个几百文件的空 diff。换行符目前由 .cmd 脚本自身保证 CRLF。
 # ─────────────────────────────────────────────────────────────
 
+# shell 脚本必须 LF：core.autocrlf=true 的机器上如果被转成 CRLF，bash 会报 $'\r': command not found
+*.sh text eol=lf
+
 # 二进制文件：不做文本 diff
 *.png binary
 *.project binary
