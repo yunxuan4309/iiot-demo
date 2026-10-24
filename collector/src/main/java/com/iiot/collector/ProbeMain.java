@@ -1,6 +1,7 @@
 package com.iiot.collector;
 
 import com.ghgande.j2mod.modbus.facade.AbstractModbusMaster;
+import com.ghgande.j2mod.modbus.procimg.InputRegister;
 import com.ghgande.j2mod.modbus.facade.ModbusSerialMaster;
 import com.ghgande.j2mod.modbus.facade.ModbusTCPMaster;
 import com.ghgande.j2mod.modbus.util.SerialParameters;
@@ -104,62 +105,176 @@ public final class ProbeMain {
         }
     }
 
-    private static void readAndExplain(AbstractModbusMaster master, int unitId) throws Exception {
-        long startedAt = System.nanoTime();
-        Register[] registers = master.readMultipleRegisters(unitId, SimDevice.REG_TEMP, 4);
-        long costMillis = (System.nanoTime() - startedAt) / 1_000_000L;
+    /**
+     * 四个区域全探一遍 —— 现场设备不一定把数据放在 holding。
+     *
+     * <p>典型例子：CODESYS 的 Modbus 从站把 PLC 的 {@code %QW} 暴露成 <b>输入寄存器（FC04）</b>、
+     * {@code %QX} 暴露成 <b>离散输入（FC02）</b>，而 {@code %IW} 才是保持寄存器。
+     * 只会读 FC03 的探测器在那种设备上"什么都读不到"，很容易误判成"地址错了"。
+     *
+     * <p>另外每个区域<b>单独容错</b>：从站只实现了部分区域时（比如线圈数量配成 0），
+     * 读它会被回 <b>Illegal Data Address</b>，不能让整个探测中断。
+     */
+    private static void readAndExplain(AbstractModbusMaster master, int unitId) {
+        System.out.println();
+        System.out.println("═══ 四个区域全探（现场设备可能把数据放在任意一个）═══");
 
-        System.out.printf("%n== 原始寄存器（FC03 holding，offset %d..%d ↔ 惯用编号 40001..40004）耗时 %d ms ==%n",
-                SimDevice.REG_TEMP, SimDevice.REG_TEMP + registers.length - 1, costMillis);
-        for (int i = 0; i < registers.length; i++) {
-            int value = registers[i].getValue() & 0xFFFF;
-            System.out.printf("  reg[%d] (4%04d) = 0x%04X   %d%n",
-                    i, i + 1, value, value);
-        }
+        int[] holding = readRegisters(master, unitId, false, 0, PROBE_WORDS);
+        int[] input = readRegisters(master, unitId, true, 0, PROBE_WORDS);
+        boolean[] coils = readBits(master, unitId, false, 0, PROBE_WORDS);
+        boolean[] discrete = readBits(master, unitId, true, 0, PROBE_WORDS);
 
-        int tempReg0 = registers[0].getValue() & 0xFFFF;
-        int tempReg1 = registers[1].getValue() & 0xFFFF;
+        printRegisters("保持寄存器（FC03 · 惯用编号 40001+ · PLC 侧 %IW）", holding);
+        printRegisters("输入寄存器（FC04 · 惯用编号 30001+ · PLC 侧 %QW）", input);
+        printBits("线圈（FC01 · 00001+ · PLC 侧 %IX）", coils);
+        printBits("离散输入（FC02 · 10001+ · PLC 侧 %QX）", discrete);
 
         System.out.println();
-        System.out.println("== temperature（Float32 = reg[0] + reg[1]）按四种字序解析 ==");
-        WordOrder plausible = null;
-        for (WordOrder order : WordOrder.values()) {
-            float value = order.floatOf(tempReg0, tempReg1);
-            boolean inRange = value > 10 && value < 100;
-            if (inRange && plausible == null) {
-                plausible = order;
-            }
-            System.out.printf("  %-4s %22s  %s%n", order, format(value),
-                    inRange ? "<== 落在 10~100℃ 区间" : "（不像温度）");
-        }
-
-        int hoursReg0 = registers[2].getValue() & 0xFFFF;
-        int hoursReg1 = registers[3].getValue() & 0xFFFF;
-        System.out.println();
-        System.out.println("== runtime_hours（UInt32 = reg[2] + reg[3]）按字序解析 ==");
-        for (WordOrder order : WordOrder.values()) {
-            long hours = order.uint32Of(hoursReg0, hoursReg1);
-            System.out.printf("  %-4s %16d h   %s%n", order, hours,
-                    hours > 0 && hours < 100_000 ? "<== 像一个合理的设备运行时长" : "（离谱）");
-        }
-
-        BitVector coils = master.readCoils(unitId, SimDevice.COIL_MOTOR, 1);
-        BitVector inputs = master.readInputDiscretes(unitId, SimDevice.INPUT_ALARM, 1);
-        System.out.println();
-        System.out.println("== 开关量 ==");
-        System.out.printf("  motor_running (coil %d, FC01)  = %s%n", SimDevice.COIL_MOTOR, coils.getBit(0));
-        System.out.printf("  alarm         (input %d, FC02) = %s%n", SimDevice.INPUT_ALARM, inputs.getBit(0));
+        System.out.println("═══ 按字序解析（只在有数据的寄存器区域做）═══");
+        boolean found = false;
+        found |= decodeCandidates("保持寄存器", holding);
+        found |= decodeCandidates("输入寄存器", input);
 
         System.out.println();
-        if (plausible != null) {
-            System.out.printf("判定：只有 %s 落在合理区间 → 这台设备的 temperature 是 %s%n", plausible, plausible);
-            System.out.println("     （第一次读成天文数字是正常的，那就是字序没对上）");
+        System.out.println("═══ 判定 ═══");
+        if (found) {
+            System.out.println("  ✅ 上面标 <== 的位置就是数据所在：按「区域 + offset + 字序」填进点表即可");
+            System.out.println("     （同一台设备里不同点位可以用不同字序，那是正常的）");
         } else {
-            System.out.println("判定：四种字序**都不**合理 → 要么设备不是 Float32，要么寄存器地址整体错位一位（坑 2）");
-            System.out.println("      先确认 40001 是惯用编号、报文里要传 offset 0");
-            System.exit(2);
+            System.out.println("  ❌ 四个区域都没读到像温度（10~100℃）的值。按这个顺序排查：");
+            System.out.println("     1. 寄存器地址整体错位一位？（坑 2：40001 是惯用编号，报文传 offset 0）");
+            System.out.println("     2. 数据类型不是 Float32？（可能是 Int16 × 10 倍缩放，温度 = 值/10）");
+            System.out.println("     3. 从站只暴露了部分区域？（看上面哪个区域报 Illegal Data Address）");
+            System.out.println("     4. 数据还没开始更新？（PLC 程序是不是 STOP 状态）");
         }
     }
+
+    /** 一次读这么多字/位就够看清楚了；再多对定位没帮助。 */
+    private static final int PROBE_WORDS = 8;
+
+    /** 读寄存器区；失败返回 {@code null}（该区域不存在或未开放）。 */
+    private static int[] readRegisters(AbstractModbusMaster master, int unitId,
+                                       boolean inputArea, int ref, int count) {
+        // 数量递减重试：现场设备常常只开放很少几个字，
+        // 一次要 8 个会被回 Illegal Data Address（实测 CODESYS 配 1 位离散输入就是这样）。
+        for (int n : new int[]{count, 4, 2}) {
+            if (n > count) {
+                continue;
+            }
+            try {
+                InputRegister[] registers = inputArea
+                        ? master.readInputRegisters(unitId, ref, n)
+                        : master.readMultipleRegisters(unitId, ref, n);
+                int[] values = new int[registers.length];
+                for (int i = 0; i < registers.length; i++) {
+                    values[i] = registers[i].getValue() & 0xFFFF;
+                }
+                return values;
+            } catch (Exception ignored) {
+                // 换小一点的数量再试
+            }
+        }
+        return null;
+    }
+
+    /** 读位区域；失败返回 {@code null}。 */
+    private static boolean[] readBits(AbstractModbusMaster master, int unitId,
+                                      boolean inputArea, int ref, int count) {
+        // 同上：数量递减重试。CODESYS 把离散输入配成 1 个时，一次要 8 位会报 Illegal Data Address。
+        for (int n : new int[]{count, 4, 2, 1}) {
+            if (n > count) {
+                continue;
+            }
+            try {
+                BitVector bits = inputArea
+                        ? master.readInputDiscretes(unitId, ref, n)
+                        : master.readCoils(unitId, ref, n);
+                boolean[] values = new boolean[n];
+                for (int i = 0; i < n; i++) {
+                    values[i] = bits.getBit(i);
+                }
+                return values;
+            } catch (Exception ignored) {
+                // 换小一点的数量再试
+            }
+        }
+        return null;
+    }
+
+    private static void printRegisters(String label, int[] values) {
+        if (values == null) {
+            System.out.printf("%n== %s ==%n  ❌ 读不到（该区域不存在 / 未开放 / 数量配成 0）%n", label);
+            return;
+        }
+        boolean allZero = true;
+        for (int v : values) {
+            if (v != 0) {
+                allZero = false;
+                break;
+            }
+        }
+        System.out.printf("%n== %s ==%n", label);
+        for (int i = 0; i < values.length; i++) {
+            System.out.printf("  reg[%d] = 0x%04X   %d%n", i, values[i], values[i]);
+        }
+        if (allZero) {
+            System.out.println("  （全 0 —— 该区域开放了，但没有数据写进来）");
+        }
+    }
+
+    private static void printBits(String label, boolean[] values) {
+        if (values == null) {
+            System.out.printf("%n== %s ==%n  ❌ 读不到（该区域不存在 / 未开放 / 数量配成 0）%n", label);
+            return;
+        }
+        System.out.printf("%n== %s ==%n", label);
+        StringBuilder sb = new StringBuilder("  ");
+        for (int i = 0; i < values.length; i++) {
+            sb.append('[').append(i).append(']').append(values[i] ? "1 " : "0 ");
+        }
+        System.out.println(sb);
+    }
+
+    /**
+     * 在一个寄存器区里扫描「起始偏移 × 四种字序」的所有组合，打印落在合理温度区间的。
+     *
+     * @return 是否找到至少一个合理解释
+     */
+    private static boolean decodeCandidates(String label, int[] values) {
+        if (values == null || values.length < 2) {
+            return false;
+        }
+        boolean allZero = true;
+        for (int v : values) {
+            if (v != 0) {
+                allZero = false;
+                break;
+            }
+        }
+        if (allZero) {
+            return false;
+        }
+
+        System.out.printf("%n  【%s】%n", label);
+        boolean found = false;
+        for (int offset = 0; offset + 1 < values.length; offset++) {
+            for (WordOrder order : WordOrder.values()) {
+                float value = order.floatOf(values[offset], values[offset + 1]);
+                boolean plausible = value > 10 && value < 100;
+                if (!plausible) {
+                    continue;
+                }
+                found = true;
+                System.out.printf("    offset %d + %-4s → %10s  <== 合理（10~100℃）%n",
+                        offset, order, format(value));
+            }
+        }
+        if (!found) {
+            System.out.println("    （这个区域的原始值里没有能解成 10~100℃ 的组合）");
+        }
+        return found;
+    }
+
 
     /** 大数用科学计数法，避免把控制台撑爆；小数保留两位。 */
     private static String format(float value) {
