@@ -64,6 +64,9 @@
 
 **为什么采集端和平台分开**：采集挂了历史还在，平台照样能看过去 30 分钟；平台被刷爆不影响 10ms 级的采集。
 
+**北向 MQTT**：采集端同时把数据发布到 `iiot/{device}/{point}`（QoS 1 + retain），
+给第三方系统订阅 —— 页面走 HTTP，MES/SCADA/大屏走 MQTT，两条路互不影响。
+
 ---
 
 ## 实测数据（都是跑出来的，不是估算）
@@ -128,6 +131,11 @@ collector\run-multi-tdengine.cmd --fanout 100 --duration 60
 
 # 4) 起监测页面 → http://localhost:8080
 platform\run-platform.cmd
+
+# 可选：北向 MQTT（起 broker + 看消息流）
+device\mqtt\start-mqtt.cmd
+collector\run-multi.cmd --fanout 10 --duration 60 --northbound mqtt
+device\mqtt\subscribe.cmd          # 另开一个窗口看 iiot/# 的数据流
 ```
 
 ### 只想验证协议/性能（不装时序库）
@@ -236,7 +244,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 
 - **不是生产系统**：单机、无认证、无高可用、无联锁
 - **真传感器尚未接入**：目前用仿真从站验证协议链路；`RtuModbusDriver` 接口已留，硬件到货后只换实现
-- **北向 MQTT 未实现**：页面走 HTTP；架构里预留 `iiot/{device}/{point}` 的 topic 规范 —— demo 阶段验证的是**数据模型与协议链路**，不是分发能力
+- **北向 MQTT 已实现**：`iiot/{device}/{point}`，QoS 1 + retain，Mosquitto 跑在 WSL；**但只做了"分发"**，没做认证/授权（demo 用 `allow_anonymous`，生产必须开）
 - **告警只做了判断，没做通知**：`AlarmEngine` 已实现**持续时间去抖 + 回差 + 分级 + 质量码门禁**，并用 A/B 实测过（86 条 → 12 条，压掉 86%）；但**通知通道（短信/企微/邮件）与同源告警合并没做**
 - **只有 4 个点位**：够验证链路，不够覆盖真实产线（一台设备几十上百点位）
 
@@ -248,6 +256,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 |---|---|
 | [docs/pitfalls.md](docs/pitfalls.md) | 七个坑的实测过程与结论 |
 | [docs/TDengine-部署与踩坑.md](docs/TDengine-部署与踩坑.md) | Windows 无服务端包 → WSL2 免 root 部署；IPv6/UTC/保留字 三个数据层坑 |
+| [docs/MQTT-北向分发.md](docs/MQTT-北向分发.md) | 北向为什么是 MQTT 而不是 HTTP；topic/QoS/retain 的选择；4 个坑 |
 | [docs/OpenPLC/三语言进度与踩坑.md](docs/OpenPLC/三语言进度与踩坑.md) | IEC 61131-3 三种语言（LD/ST/FBD）在同一工程里跑通 |
 | [docs/双工具同一段ST-对比验证.md](docs/双工具同一段ST-对比验证.md) | 同一段 ST 在 OpenPLC 与 CODESYS 上分别编译运行 |
 | [docs/CODESYS/环境搭建与踩坑.md](docs/CODESYS/环境搭建与踩坑.md) | 工业软件工具链安装 + 连通/会话/认证三层排障 |

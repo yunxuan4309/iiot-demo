@@ -224,6 +224,8 @@
   </div>
 </div>
 
+<div style="font-size:6.9pt;color:var(--muted);margin-top:3px;"><b style="color:var(--good)">北向</b> 采集端同时发布 MQTT <code>iiot/{device}/{point}</code>（QoS 1 · retain=true）给 MES / SCADA / 大屏订阅；页面走 HTTP（只读 TDengine），两条路互不影响。</div>
+
 <!-- ══════════ 实测指标 ══════════ -->
 <h2>实测指标 <span class="en">100 devices × 4 points × 1 Hz × 60 s</span></h2>
 <div class="stats">
@@ -311,7 +313,7 @@
 <div class="limit">
   <b>不是生产系统</b>（单机 · 无认证 · 无高可用 · 无联锁）
   <span>│</span> <b>真传感器尚未接入</b>：当前用仿真从站验证协议链路，<code>RtuModbusDriver</code> 接口已留
-  <span>│</span> <b>北向 MQTT 未实现</b>：页面走 HTTP，架构预留 <code>iiot/{device}/{point}</code> topic 规范
+  <span>│</span> <b>北向 MQTT 已通</b>：<code>iiot/{device}/{point}</code> · QoS 1 · retain，但没开认证（demo 用匿名）
   <span>│</span> <b>告警只做判断不做通知</b>：引擎已实现并 A/B 验证，但短信/企微与同源合并未做
   <span>│</span> 只有 4 个点位，够验证链路、不够覆盖真实产线
 </div>

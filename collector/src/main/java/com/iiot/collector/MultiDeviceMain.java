@@ -11,6 +11,7 @@ import com.iiot.collector.core.TelemetryRepository;
 import com.iiot.collector.driver.TcpModbusDriver;
 import com.iiot.collector.core.AlarmEngine;
 import com.iiot.collector.repo.CountingTelemetryRepository;
+import com.iiot.collector.north.MqttPublisher;
 import com.iiot.collector.repo.TdengineTelemetryRepository;
 
 import java.io.IOException;
@@ -95,6 +96,7 @@ public final class MultiDeviceMain {
         AlarmEngine alarms = createAlarmEngine(args);
         // A/B 模式：同一批采样点同时喂给「去抖」和「不去抖」两个引擎 ——
         // 保证对比的是"配置差异"，不是"两次运行的信号差异"。
+        final MqttPublisher mqtt = createMqttPublisher(args);
         final AlarmEngine strictAlarms;
         if (alarms != null && hasFlag(args, "--alarm-ab")) {
             strictAlarms = strictAlarmEngine();
@@ -130,7 +132,7 @@ public final class MultiDeviceMain {
         for (DeviceConfig config : configs) {
             executor.submit(() -> {
                 try {
-                    runDevice(config, repository, stats, alarms, strictAlarms, timeoutMillis, maxCycles,
+                    runDevice(config, repository, stats, alarms, strictAlarms, mqtt, timeoutMillis, maxCycles,
                             deadline, intervalOverride, stop, echo);
                 } finally {
                     allDone.countDown();
@@ -167,6 +169,9 @@ public final class MultiDeviceMain {
         if (alarms != null) {
             System.out.print(alarms.report());
         }
+        if (mqtt != null) {
+            System.out.println(mqtt.summaryLine());
+        }
         if (strictAlarms != null) {
             System.out.println();
             System.out.println("══════════ A/B 对比（同一批采样点，只改配置）══════════");
@@ -181,6 +186,11 @@ public final class MultiDeviceMain {
                 System.out.println("  （本次没有告警，无法比较）");
             }
             System.out.println("══════════════════════════════════════════════════════");
+        }
+        // ⚠️ Paho 的客户端线程不是守护线程：不显式 close()，JVM 打了报告也不退出。
+        // 这不是"卡住"，是"干完活了但线程还挂着" —— 实测踩过一次。
+        if (mqtt != null) {
+            mqtt.close();
         }
     }
 
@@ -201,6 +211,27 @@ public final class MultiDeviceMain {
      * {@code --alarm-rules <file>} 用外部文件 —— 现场改阈值不改代码，也方便做 A/B 对比
      * （同一批数据，一份"不去抖"、一份"去抖+回差"，直接看告警条数差多少）。
      */
+    /**
+     * 构造北向 MQTT 发布端。
+     *
+     * <p>只有 {@code --northbound mqtt} 才建立连接 —— 默认不连，
+     * 这样"只想看采集性能"的场景不需要 broker，也不会有一次多余的 TCP 连接。
+     */
+    private static MqttPublisher createMqttPublisher(String[] args) {
+        String northbound = stringArg(args, "--northbound", "none");
+        if (!northbound.toLowerCase().contains("mqtt")) {
+            return null;
+        }
+        String url = stringArg(args, "--mqtt-url", "tcp://localhost:1883");
+        int qos = intArg(args, "--mqtt-qos", 1);
+        boolean retain = !hasFlag(args, "--mqtt-no-retain");
+        String clientId = "iiot-collector-" + ProcessHandle.current().pid();
+        MqttPublisher publisher = new MqttPublisher(url, clientId, qos, retain);
+        System.out.println("北向 MQTT 已连接 · " + url + " · topic iiot/{device}/{point}"
+                + " · QoS " + qos + " · retain=" + retain);
+        return publisher;
+    }
+
     private static AlarmEngine createAlarmEngine(String[] args) {
         String rulesFile = stringArg(args, "--alarm-rules", null);
         if (rulesFile == null && !hasFlag(args, "--alarm")) {
@@ -256,6 +287,7 @@ public final class MultiDeviceMain {
                                   CollectStats stats,
                                   AlarmEngine alarms,
                                   AlarmEngine strictAlarms,
+                                  MqttPublisher mqtt,
                                   int timeoutMillis,
                                   int maxCycles,
                                   long deadline,
@@ -291,6 +323,13 @@ public final class MultiDeviceMain {
                         if (strictAlarms != null) {
                             strictAlarms.onSample(value);
                         }
+                    }
+                }
+
+                // 北向 MQTT：与南向解耦 —— 发布失败只计数，绝不影响采集
+                if (mqtt != null) {
+                    for (PointValue value : batch) {
+                        mqtt.publish(value, value.unit());
                     }
                 }
 
@@ -362,6 +401,13 @@ public final class MultiDeviceMain {
                   --alarm              启用告警引擎（规则见 resources/alarms.properties）
                                        ⚠️ 只对 GOOD 数据判告警；STALE/BAD 一律不报
                   --alarm-rules <file> 用外部规则文件（现场改阈值 / 做 A/B 对比）
+                  --alarm-ab            A/B：同一批数据同时喂「去抖」与「不去抖」两个引擎
+
+                北向 MQTT（发布订阅，一对多分发）：
+                  --northbound mqtt    启用北向 MQTT 发布（默认 none）
+                  --mqtt-url <url>     broker 地址，默认 tcp://localhost:1883
+                  --mqtt-qos <n>       QoS，默认 1（至少一次）
+                  --mqtt-no-retain     关闭 retain（默认开：新订阅者立刻拿到最新值）
 
                 存储（--store）：
                   counting             不落盘，只计数（默认，用来建立采集端基线）
