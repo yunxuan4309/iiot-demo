@@ -1,0 +1,58 @@
+package com.iiot.collector.core;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 设备扇出 —— 把「一台设备的点表模板」复制成 N 台虚拟设备。
+ *
+ * <p>为什么需要它：100 台设备的点表不可能手写（100 × 4 个点 × 6 个配置项 = 2400 行）。
+ * 现场的真实做法是「一台表配好，其余照抄，只改地址」；这里把"只改地址"这一步参数化。
+ *
+ * <p><b>关键约定</b>：仿真从站用 {@code SimSlaveMain --devices N} 在<b>同一个端口</b>上
+ * 挂 N 个从站号（unitId 1..N）—— 这正是 **RS485 网关后挂多台表**的形态：
+ * <pre>
+ *   host/port 相同，unitId 不同  ⇒  一台网关 + N 台表
+ * </pre>
+ * 所以扇出时<b>只改 unitId 和 deviceId</b>，host/port/点表/周期全部继承模板。
+ *
+ * @see DeviceConfig
+ */
+public final class DeviceFanout {
+
+    private DeviceFanout() {
+    }
+
+    /**
+     * 把模板复制成 {@code count} 台设备。
+     *
+     * @param template 模板设备（它的 unitId 被忽略，从 1 开始重新编号）
+     * @param count    总台数（>= 1）
+     */
+    public static List<DeviceConfig> expand(DeviceConfig template, int count) {
+        if (count < 1) {
+            throw new IllegalArgumentException("count 必须 >= 1");
+        }
+        String prefix = baseName(template.deviceId());
+        String pattern = count <= 99 ? prefix + "-%02d" : prefix + "-%03d";
+
+        List<DeviceConfig> devices = new ArrayList<>(count);
+        for (int unitId = 1; unitId <= count; unitId++) {
+            String deviceId = String.format(pattern, unitId);
+            DeviceEndpoint endpoint = new DeviceEndpoint(
+                    deviceId,
+                    template.endpoint().protocol(),
+                    template.endpoint().host(),
+                    template.endpoint().port(),
+                    unitId);
+            devices.add(new DeviceConfig(endpoint, template.points(), template.periodMillis()));
+        }
+        return devices;
+    }
+
+    /** {@code sim-01} → {@code sim}；{@code plc} → {@code plc}。 */
+    private static String baseName(String deviceId) {
+        String stripped = deviceId.replaceAll("-\\d+$", "");
+        return stripped.isEmpty() ? "dev" : stripped;
+    }
+}

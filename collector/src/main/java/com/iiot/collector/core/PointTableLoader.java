@@ -120,12 +120,29 @@ public final class PointTableLoader {
                 : WordOrder.parse(orderText.trim());
         String unit = props.getProperty(base + "unit");
 
-        PointDef point = new PointDef(pointId, area, offset, type, order, unit);
+        // 量程：可选。配了就作为"字序配错"的最后一道防线（超范围判 BAD）
+        Double min = optionalDouble(props, base + "min");
+        Double max = optionalDouble(props, base + "max");
+
+        PointDef point = new PointDef(pointId, area, offset, type, order, unit, min, max);
         String problem = point.validate();
         if (problem != null) {
             throw new IOException("设备 " + deviceId + " 的点位配置不合法: " + problem);
         }
         return point;
+    }
+
+    /** 可选的小数配置项；没写返回 {@code null}。 */
+    private static Double optionalDouble(Properties props, String key) throws IOException {
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IOException("配置项 " + key + " 需要数字，实际是: " + value);
+        }
     }
 
     private static PointDef.Area parseArea(String text, String pointId) throws IOException {

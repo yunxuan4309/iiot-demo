@@ -69,7 +69,11 @@ public final class SimSlaveMain {
 
         List<SimDevice> devices = new ArrayList<>(deviceCount);
         for (int i = 0; i < deviceCount; i++) {
-            SimDevice device = new SimDevice(firstUnitId + i, tempOrder, hoursOrder, baseTemperature + i * 0.7);
+            // 温度偏移用「锯齿」而不是线性 i * 0.7：
+            // 同一个厂房里 100 个测点不会"编号越大越热"。线性递增到第 83 台就冲到 120℃，
+            // 会被点表的量程校验判成 BAD（校验没错，是仿真模型不真实）。
+            double temperatureSpread = (i % 40) * 0.7;
+            SimDevice device = new SimDevice(firstUnitId + i, tempOrder, hoursOrder, baseTemperature + temperatureSpread);
             slave.addProcessImage(firstUnitId + i, device.image());
             devices.add(device);
         }
