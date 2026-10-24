@@ -34,7 +34,11 @@ public final class DeviceFanout {
             throw new IllegalArgumentException("count 必须 >= 1");
         }
         String prefix = baseName(template.deviceId());
-        String pattern = count <= 99 ? prefix + "-%02d" : prefix + "-%03d";
+        // ⚠️ 必须与台数无关：曾经写成 "<=99 用 %02d，否则 %03d"，
+        // 结果 --fanout 10 生成 sim-01..sim-10、--fanout 100 生成 sim-001..sim-100，
+        // 同一个库里的设备 ID 出现两套格式（实测库里变成 110 台）。
+        // %02d 是最小宽度，100 会自然变成 "100" ⇒ sim-01..sim-100 始终一致。
+        String pattern = prefix + "-%02d";
 
         List<DeviceConfig> devices = new ArrayList<>(count);
         for (int unitId = 1; unitId <= count; unitId++) {
