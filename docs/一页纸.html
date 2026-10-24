@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>工业设备数据采集与在线监测 · 一页纸</title>
+<style>
+  @page { size: A4; margin: 9mm 10mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    font: 8.5pt/1.42 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #111; background: #fff;
+  }
+
+  h1 { font-size: 14.5pt; margin: 0 0 2px; letter-spacing: .3px; }
+  .sub { font-size: 8.2pt; color: #444; margin: 0 0 6px; }
+  h2 {
+    font-size: 9.6pt; margin: 8px 0 3px; padding-bottom: 1.5px;
+    border-bottom: 1px solid #bbb; color: #000;
+  }
+  h2:first-of-type { margin-top: 4px; }
+
+  p { margin: 2px 0; }
+  ul { margin: 2px 0 2px 16px; padding: 0; }
+  li { margin: 0.5px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 2px 0 3px; }
+  th, td { text-align: left; padding: 1.6px 4px; vertical-align: top; border-bottom: 0.5px solid #ddd; }
+  th { background: #f1f3f5; font-weight: 600; font-size: 8pt; }
+  td:first-child { white-space: nowrap; }
+
+  pre {
+    margin: 3px 0; padding: 5px 7px; background: #f6f7f8;
+    border: 0.5px solid #d5d8db; border-left: 2.5px solid #4a9eff;
+    font: 7.2pt/1.32 Consolas, "Courier New", monospace;
+    white-space: pre; overflow: hidden;
+  }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 7.8pt; background: #f0f1f2; padding: 0 2px; }
+
+  .lead {
+    background: #f6f8fa; border-left: 3px solid #4a9eff;
+    padding: 4px 8px; margin: 0 0 6px; font-size: 8.4pt;
+  }
+  .lead b { color: #0b5cad; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+
+  .num { font-variant-numeric: tabular-nums; }
+  .hi { background: #fff3d6; font-weight: 600; }
+
+  footer {
+    margin-top: 6px; padding-top: 3px; border-top: 0.5px solid #ccc;
+    font-size: 7.4pt; color: #666; display: flex; justify-content: space-between;
+  }
+
+  .toolbar { position: fixed; right: 14px; top: 14px; }
+  .toolbar button {
+    font: 9pt -apple-system, "Microsoft YaHei", sans-serif;
+    padding: 6px 14px; border: 1px solid #4a9eff; background: #4a9eff; color: #fff;
+    border-radius: 6px; cursor: pointer;
+  }
+  @media print {
+    .toolbar { display: none; }
+    h2 { break-after: avoid; }
+    table, pre { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar"><button onclick="window.print()">打印 / 存 PDF</button></div>
+
+<h1>工业设备数据采集与在线监测</h1>
+<p class="sub">南向 Modbus（TCP/RTU）→ 统一数据模型（含质量码）→ 时序库 → Web 监测页 · 全链路自建、可一条命令复现</p>
+
+<div class="lead">
+  <b>解决什么问题</b>：工业数据与互联网数据的三点差别，也是本项目的三个工程约束 ——
+  ① 数据在<b>二进制寄存器</b>里（32 位值跨两个 16 位寄存器，<b>四种字节序</b>）② 数据<b>可能不可信</b>（断线不能补 0）
+  ③ 点位约定在<b>厂家手册</b>里（地址/类型/字序/量程全走配置，代码里没有设备私有约定）。
+</div>
+
+<h2>架构</h2>
+<pre>  仿真从站 × N ／ 真传感器 × 1
+        │  Modbus TCP(1502) ／ RTU(RS485)
+        ▼
+  collector（Java 21）   DeviceDriver 抽象 ─ TcpModbusDriver ✔ ／ RtuModbusDriver（接口已留）
+                         DeviceSampler ─ 质量码 GOOD/STALE/BAD ＋ 量程校验
+                         每设备一条虚拟线程 ＋ 独立驱动 ＋ 失败退避(1×2×4×8)
+        │  批量 REST（攒 500 点 / 500 ms）
+        ▼
+  TDengine 3.3（WSL2 内免 root 运行）  超级表 telemetry ＋ 每「设备 × 点位」一张子表
+        │  SQL（只读）
+        ▼
+  platform（Spring Boot ＋ ECharts）   /api/overview · /api/latest · /api/series</pre>
+
+<h2>实测指标（100 台 × 4 点位 × 1 Hz × 60 秒）</h2>
+<table>
+  <tr><th style="width:24%">指标</th><th>值</th></tr>
+  <tr><td>采集完整率</td><td class="hi num">100.00%（24000 / 24000，GOOD 24000）</td></tr>
+  <tr><td>入库吞吐</td><td class="hi num">388 点/秒（195 批，每批约 123 点 ⇒ HTTP ≈ 3 次/秒）</td></tr>
+  <tr><td>采集延迟</td><td class="hi num">P50 1.27 ms · P95 4.14 ms · P99 9.95 ms</td></tr>
+  <tr><td>写入失败 / 队列丢弃</td><td class="num">0 / 0</td></tr>
+  <tr><td>断线演练</td><td>值<b>保留上次</b>并标 <b>STALE</b>（不是 0）；采集器<b>不崩</b>，完整率从 100% 平滑降到 61.5%</td></tr>
+  <tr><td>字序证伪</td><td>同一帧 0x704A/0x4280：<b>CDAB → 64.22℃</b>，ABCD → 2.5e29（天文数字）</td></tr>
+</table>
+
+<h2>八个坑（每条都是「我以为是 X，其实是 Y」）</h2>
+<table>
+  <tr><th style="width:3%">#</th><th style="width:17%">坑</th><th>结论</th></tr>
+  <tr><td>0</td><td><b>假数据一眼假</b></td><td><code>random()</code> 是锯齿；真信号要有惯性（一阶低通）＋缓慢漂移＋偶发尖峰＋采样抖动</td></tr>
+  <tr><td>1</td><td><b>寄存器字序</b></td><td>Modbus 只规定寄存器是 16 位，<b>不规定 32 位怎么拆</b>；国内仪表常见 <b>CDAB</b>（字交换）</td></tr>
+  <tr><td>2</td><td><b>40001 vs offset 0</b></td><td>手册的 <code>40001</code> 是 1 基惯用编号，报文传 0 基。混了<b>不是读错值，而是永远超时</b>（报文里 <code>9C 41</code> = 40001）</td></tr>
+  <tr><td>3</td><td><b>断线不是 0</b></td><td>补 0 比没数据更危险 → 必须显式标 STALE（旧值）／BAD（无值），值可以是旧的但<b>必须标"这是旧的"</b></td></tr>
+  <tr><td>4</td><td><b>写不幂等</b></td><td>超时重发会让"触发型"写执行两次。本 demo 可写点只有线圈置位（天然幂等），故<b>只记录、未制造</b></td></tr>
+  <tr><td>5</td><td><b>单设备拖垮采集</b></td><td>三重隔离：线程（虚拟线程）／连接（每设备独立 driver，因为 <code>read()</code> 是 synchronized）／时间（读超时）＋ 失败退避</td></tr>
+  <tr><td>6</td><td><b>时间基准</b></td><td>TDengine 存 UTC、返回带 <code>Z</code>；前端不转时区整张图偏 8 小时。采集端用 <b>epoch 毫秒</b>写入避免歧义</td></tr>
+  <tr><td>7</td><td><b>告警泛滥</b></td><td>实测：10 分钟 3 台设备 <b>836 个越限采样点，但只有 10 次真实越限事件 = 放大 83.6 倍</b>；解法＝持续时间去抖 ＋ 回差 ＋ 分级抑制</td></tr>
+</table>
+
+<h2>技术栈与取舍</h2>
+<div class="two">
+  <table>
+    <tr><th style="width:34%">选择</th><th>为什么</th></tr>
+    <tr><td>Java 21 <b>虚拟线程</b></td><td>100 台设备＝100 条线程，平台线程太重</td></tr>
+    <tr><td><b>j2mod</b></td><td>主站＋从站一体，能自己造仿真设备验证协议</td></tr>
+    <tr><td><b>纯文本点表</b></td><td>厂家点位约定不该写进代码</td></tr>
+  </table>
+  <table>
+    <tr><th style="width:34%">选择</th><th>为什么</th></tr>
+    <tr><td><b>TDengine</b></td><td>工业圈常见；超级表＋子表天然贴合「设备×点位」</td></tr>
+    <tr><td><b>REST 而非 JDBC</b></td><td>免 native 库、可跨 WSL／SSH 隧道；返回自带 <code>column_meta</code></td></tr>
+    <tr><td><b>ECharts 本地副本</b></td><td>离线可跑，不依赖 CDN</td></tr>
+  </table>
+</div>
+
+<h2>边界（诚实的部分）</h2>
+<ul>
+  <li><b>不是生产系统</b>：单机、无认证、无高可用、无联锁。</li>
+  <li><b>真传感器尚未接入</b>：当前用仿真从站验证协议链路；<code>RtuModbusDriver</code> 接口已留，硬件到货只换实现。</li>
+  <li><b>北向 MQTT 未实现</b>：页面走 HTTP，架构里预留 <code>iiot/{device}/{point}</code> 的 topic 规范。</li>
+  <li><b>告警模块未实现</b>：坑 7 只有设计（去抖＋回差＋分级），没有代码。</li>
+  <li><b>只有 4 个点位</b>：够验证链路，不够覆盖真实产线（一台设备常几十上百点位）。</li>
+</ul>
+
+<footer>
+  <span>采集端 <code>collector/</code> · 平台 <code>platform/</code> · 坑记录 <code>docs/pitfalls.md</code></span>
+  <span>2026-10</span>
+</footer>
+
+</body>
+</html>
