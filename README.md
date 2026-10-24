@@ -257,6 +257,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 | [docs/pitfalls.md](docs/pitfalls.md) | 七个坑的实测过程与结论 |
 | [docs/TDengine-部署与踩坑.md](docs/TDengine-部署与踩坑.md) | Windows 无服务端包 → WSL2 免 root 部署；IPv6/UTC/保留字 三个数据层坑 |
 | [docs/MQTT-北向分发.md](docs/MQTT-北向分发.md) | 北向为什么是 MQTT 而不是 HTTP；topic/QoS/retain 的选择；4 个坑 |
+| [docs/PLC与Java的分工.md](docs/PLC与Java的分工.md) | ⭐ **这个项目最核心的一课**：PLC 管现在、Java 管过去；扫描≠记录；10ms vs 1s 丢了 99%；控制的是执行器不是传感器 |
 | [docs/启动与运行.md](docs/启动与运行.md) | **五个程序 / 启动顺序 / 三种启动方式（脚本·命令行·IDEA）/ 参数速查 / 故障对照** |
 | [docs/OpenPLC/三语言进度与踩坑.md](docs/OpenPLC/三语言进度与踩坑.md) | IEC 61131-3 三种语言（LD/ST/FBD）在同一工程里跑通 |
 | [docs/双工具同一段ST-对比验证.md](docs/双工具同一段ST-对比验证.md) | 同一段 ST 在 OpenPLC 与 CODESYS 上分别编译运行 |
