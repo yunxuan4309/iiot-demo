@@ -148,23 +148,81 @@ device.rtu-01.point.humidity.max=100
 
 ---
 
-## 七、虚拟串口自测（没硬件也能验证）
+## 七、虚拟串口自测（没硬件也能验证）—— ✅ **2026-10-24 已实测通过**
 
-**原理**：装一对虚拟串口（`COM3 ↔ COM4`，如 com0com），
-让**我们的仿真从站跑 RTU 模式挂在 COM3**，**采集端从 COM4 读** —— 硬件没到也能把整条链路验一遍。
+### 结论先给
 
-| 步骤 | 命令 |
-|---|---|
-| 1 | 装 com0com（需要管理员），建一对 `COM3 ↔ COM4` |
-| 2 | 从站 `collector\run-slave.cmd --port COM3 --rtu --baud 9600 --devices 1` |
-| 3 | 探测 `collector\run-probe.cmd --com COM4 --baud 9600` |
-| 4 | 采集 `collector\run-collect.cmd --points points-rtu.properties` |
+```
+rtu-test@COM6(9600-8N1)/unit=1  点位 1 个
+[16:27:23.281] rtu-test GOOD  temperature=25.60°C
+[16:27:24.193] rtu-test GOOD  temperature=25.60°C
+...
+probe: 保持寄存器 offset 0 + ABCD → 25.60（四种字序里**唯一**合理解）
+       holding[2] 计数器 11 → 23（12 秒涨 12）⇒ 每次都是真去串口读，不是缓存
+```
 
-**⇒ 这样"驱动代码是否正确"在硬件到货前就能证明；到货后只剩"接线 + 参数对一下"。**
+**⇒ `RtuModbusDriver` 从"写完没跑过"变成"真的从串口读到数"。硬件到货后只剩「改 `comPort` + 接线」。**
 
-> 当前状态：⏳ 需要先从站的 RTU 模式（`--rtu`），属于**从站改动** ——
-> ⚠️ 用户已要求「从站不忙做」，所以这条**需要确认后再动**。
-> 替代方案：用 **modbus 模拟器软件**（如 Modbus Slave / QModMaster）在虚拟串口上作从站，不碰我们的代码。
+### 本次实际用的方案（和原来设想不同，更好）
+
+| | 原设想 | 实际做法 |
+|---|---|---|
+| 虚拟串口 | com0com `COM3 ↔ COM4` | com0com 3.0.0.0 **signed**，安装器直接给了 `COM5 ↔ COM6`（**不用改名字**） |
+| 从站 | 第三方 Modbus 模拟器，**或**给仿真从站加 `--rtu` | ⭐ **用 j2mod 自带的从站 API 写了个 40 行测试桩** `RtuSlaveMain`，**零安装** |
+
+> **为什么"40 行测试桩"不算违反「从站不忙做」**：
+> 那条裁决针对的是**改产品里的 TCP 仿真从站**（`SimSlaveMain`）。
+> `RtuSlaveMain` 是**独立的测试桩**：不进产品路径、只管 RTU over 串口、只为了能随手改一个数来验字序。
+
+### 复现步骤（3 条命令）
+
+```powershell
+collector\run-rtu-slave.cmd --com COM5 --temperature 25.6   # 从站（j2mod ModbusSerialListener）
+collector\run-probe.cmd --com COM6 --unit 1                 # 探测（四区域 + 四字序）
+collector\run-collect.cmd --points collector\src\main\resources\points-rtu-test.properties --cycles 5
+```
+
+### ⭐ 两个必须记住的坑
+
+**坑 A：验证值必须"高低字都非零"**
+
+| 值 | Float32 | 低字 | 结果 |
+|---|---|---|---|
+| `25.5` | `0x41CC0000` | **0** | ❌ `ABCD@0` 和 `ABCD@1` 解出同一个数，**字序分不出来** |
+| **`25.6`** | `0x41CCCCCD` | `0xCCCD` | ✅ 四种字序里**只有一种**合理 |
+
+> 这是 CODESYS 那次的同一个教训（当时用 90.0 验不出 `CDAB`，换成 90.1 才分明）。
+> **验证字序 = 必须用带非零小数部分的值。**
+
+**坑 B：PowerShell 直接调 java 会拆坏 `-D` 参数**
+
+```powershell
+# ❌ 报 ClassNotFoundException: /encoding=UTF-8
+java -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -cp ... Main
+
+# ✅ 用 .cmd 包装（cmd 不改写参数）
+cmd /c "collector\run-rtu-slave.cmd --com COM5"
+```
+
+### 顺带验证到的"配对关系"怎么查
+
+com0com 装完不知道哪两个口是一对？查注册表最可靠：
+
+```powershell
+Get-ItemProperty "HKLM:\HARDWARE\DEVICEMAP\SERIALCOMM"
+# \Device\com0com11 -> COM6   ┐ 这两个是一对
+# \Device\com0com21 -> COM5   ┘
+```
+
+**动手前先做一步"串口对通不通"的最小验证**（跟 Modbus 无关，纯收发）：
+
+```powershell
+$p5 = New-Object System.IO.Ports.SerialPort("COM5",9600,'None',8,'One')
+$p6 = New-Object System.IO.Ports.SerialPort("COM6",9600,'None',8,'One')
+$p5.Open(); $p6.Open(); $p5.Write("HELLO"); Start-Sleep -m 300; $p6.ReadExisting()
+```
+
+实测双向各 15 字节、内容完全一致 —— **先排除"串口对本身不通"，再去查 Modbus 层**。
 
 ---
 
@@ -184,15 +242,19 @@ device.rtu-01.point.humidity.max=100
 
 ---
 
-## 九、当前缺什么（2026-10-24 状态）
+## 九、当前缺什么（2026-10-24 16:30 更新）
 
 | # | 缺口 | 状态 |
 |---|---|---|
 | 1 | **`RtuModbusDriver`** | ✅ **已实现**（`ModbusSerialMaster` + `SerialParameters`，含 RS485 方向控制开关） |
 | 2 | **点表支持串口参数** | ✅ **已实现**（`portType=rtu` + `comPort/baudRate/dataBits/stopBits/parity/rs485Mode`；模板 `points-rtu.properties` 已就绪） |
 | 3 | **`ProbeMain --com`** | ✅ **已实现**（`--com/--baud/--parity/--data-bits/--stop-bits/--rs485-mode`，失败时打印 RTU 六步排查） |
-| 4 | **一条 COM 口只能打开一次** | ✅ **已解决**：新增 `DriverRegistry`，按「物理链路」复用驱动 —— RTU 总线上所有 unitId 共用一条连接（半双工请求串行） |
-| 5 | **虚拟串口自测（com0com）** | ⏳ **待做** —— 需要装 com0com（管理员）；用第三方 Modbus 模拟器作从站，**不碰我们的仿真从站** |
+| 4 | **一条 COM 口只能打开一次** | ✅ **已解决**：`DriverRegistry` 按「物理链路」复用驱动 —— RTU 总线上所有 unitId 共用一条连接（半双工请求串行） |
+| 5 | **虚拟串口自测（com0com）** | ✅ **2026-10-24 16:27 实测通过**：com0com `COM5↔COM6` + j2mod 测试桩 `RtuSlaveMain`；实测 `temperature=25.60°C`、字序 **ABCD**、计数器 11→23 证明实时读取。详见 §七 |
 | 6 | TCP 回归 | ✅ **已验证**：重构后 10 台 600 点仍 **100%**（0 失败） |
 
-> **⇒ 1~4 + 6 已完成，「设备到了简单了解就能接入」的代码侧已就绪；只剩第 5 项（硬件到前的额外保险）。**
+> **⇒ 1~6 全部完成。** 硬件到货后只剩三件**物理**事：
+> **① 接 A→A / B→B / GND ② 看设备管理器拿到的新 COM 号填进点表 ③ 用 `run-probe --com COMx` 确认字序（大概率仍是 ABCD 或 CDAB 之一）。**
+>
+> ⚠️ 仍需现场确认的**未知量**（虚拟串口验不出来，因为是软件模拟的）：
+> **真实波特率/校验位是否与手册一致**、**RS485 方向控制是否需要 `--rs485-mode`**、**传感器 12V 供电是否稳**。
