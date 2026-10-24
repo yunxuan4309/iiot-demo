@@ -5,7 +5,11 @@
 <title>工业设备数据采集与在线监测 · 一页纸</title>
 <style>
   /* ============ 页面 ============ */
-  @page { size: A4; margin: 8mm 9mm; }
+  /*
+   * 边距两套：屏幕靠 body 的 padding，打印靠 @page 的 margin。
+   * 只写 @page 的话，浏览器里看是"顶到窗口边"的（@page 只影响打印）—— 实测踩过。
+   */
+  @page { size: A4; margin: 11mm 13mm; }
   * { box-sizing: border-box; }
 
   :root {
@@ -22,6 +26,7 @@
 
   body {
     margin: 0;
+    padding: 11mm 13mm;          /* 屏幕上的留白；打印时归零（由 @page margin 负责） */
     font: 8pt/1.4 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
     color: var(--ink);
     background: #fff;
