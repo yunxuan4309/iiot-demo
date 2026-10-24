@@ -259,6 +259,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 |---|---|
 | [docs/pitfalls.md](docs/pitfalls.md) | 七个坑的实测过程与结论 |
 | [docs/TDengine-部署与踩坑.md](docs/TDengine-部署与踩坑.md) | Windows 无服务端包 → WSL2 免 root 部署；IPv6/UTC/保留字 三个数据层坑 |
+| [docs/新鲜度检查.md](docs/新鲜度检查.md) | ⭐ **采集端停了库里仍是 GOOD** —— 为什么过期判断必须在查询层、与质量码的区别、实测抓到 3 小时未更新 |
 | [docs/MQTT-北向分发.md](docs/MQTT-北向分发.md) | 北向为什么是 MQTT 而不是 HTTP；topic/QoS/retain 的选择；4 个坑 |
 | [docs/RTU设备接入指南.md](docs/RTU设备接入指南.md) | ⭐ **传感器到货后照着做 10 步**：接线（A/B/共地）、驱动、串口参数、点表、RTU 五大坑、验收清单 |
 | [docs/PLC与Java的分工.md](docs/PLC与Java的分工.md) | ⭐ **这个项目最核心的一课**：PLC 管现在、Java 管过去；扫描≠记录；10ms vs 1s 丢了 99%；控制的是执行器不是传感器 |
