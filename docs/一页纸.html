@@ -4,66 +4,167 @@
 <meta charset="UTF-8">
 <title>工业设备数据采集与在线监测 · 一页纸</title>
 <style>
-  @page { size: A4; margin: 9mm 10mm; }
-
+  /* ============ 页面 ============ */
+  @page { size: A4; margin: 8mm 9mm; }
   * { box-sizing: border-box; }
+
+  :root {
+    --ink:    #16202a;
+    --muted:  #64717f;
+    --line:   #d6dee6;
+    --tint:   #f5f8fb;
+    --accent: #1668b3;
+    --accent-soft: #e8f1fa;
+    --good:   #0e7c6b;
+    --warn:   #b7791f;
+    --warn-soft: #fdf6e6;
+  }
+
   body {
-    margin: 0; padding: 0;
-    font: 8.5pt/1.42 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
-    color: #111; background: #fff;
+    margin: 0;
+    font: 8pt/1.4 -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: var(--ink);
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  h1 { font-size: 14.5pt; margin: 0 0 2px; letter-spacing: .3px; }
-  .sub { font-size: 8.2pt; color: #444; margin: 0 0 6px; }
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 6.7pt;
+    background: #eef2f6; color: #274154;
+    padding: 0 2px; border-radius: 2px;
+  }
+
+  /* ============ 页眉 ============ */
+  .head { position: relative; padding-bottom: 5px; border-bottom: 2.5px solid var(--accent); }
+  .eyebrow {
+    font-size: 6.6pt; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 1px;
+  }
+  h1 { font-size: 16pt; margin: 0; letter-spacing: .01em; line-height: 1.15; }
+  .head .sub { font-size: 8pt; color: var(--muted); margin-top: 2px; }
+  .head .badge {
+    position: absolute; right: 0; top: 2px;
+    font-size: 6.8pt; color: var(--accent); font-weight: 600;
+    background: var(--accent-soft); border: 1px solid #bcd7ef;
+    padding: 2px 7px; border-radius: 999px;
+  }
+
+  /* ============ 章节标题 ============ */
   h2 {
-    font-size: 9.6pt; margin: 8px 0 3px; padding-bottom: 1.5px;
-    border-bottom: 1px solid #bbb; color: #000;
+    display: flex; align-items: center; gap: 5px;
+    font-size: 9pt; margin: 7px 0 3.5px; color: var(--ink); font-weight: 700;
   }
-  h2:first-of-type { margin-top: 4px; }
-
-  p { margin: 2px 0; }
-  ul { margin: 2px 0 2px 16px; padding: 0; }
-  li { margin: 0.5px 0; }
-
-  table { width: 100%; border-collapse: collapse; margin: 2px 0 3px; }
-  th, td { text-align: left; padding: 1.6px 4px; vertical-align: top; border-bottom: 0.5px solid #ddd; }
-  th { background: #f1f3f5; font-weight: 600; font-size: 8pt; }
-  td:first-child { white-space: nowrap; }
-
-  pre {
-    margin: 3px 0; padding: 5px 7px; background: #f6f7f8;
-    border: 0.5px solid #d5d8db; border-left: 2.5px solid #4a9eff;
-    font: 7.2pt/1.32 Consolas, "Courier New", monospace;
-    white-space: pre; overflow: hidden;
+  h2::before {
+    content: ""; width: 3px; height: 11px; background: var(--accent);
+    border-radius: 1px; flex: none;
   }
-  code { font-family: Consolas, "Courier New", monospace; font-size: 7.8pt; background: #f0f1f2; padding: 0 2px; }
+  h2 .en { font-size: 6.4pt; letter-spacing: .12em; color: var(--muted); font-weight: 500; text-transform: uppercase; }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
-  .lead {
-    background: #f6f8fa; border-left: 3px solid #4a9eff;
-    padding: 4px 8px; margin: 0 0 6px; font-size: 8.4pt;
+  /* ============ 三个约束（chips） ============ */
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .fact {
+    background: var(--tint); border: 1px solid var(--line); border-radius: 4px;
+    padding: 4px 6px 4px 22px; position: relative;
   }
-  .lead b { color: #0b5cad; }
+  .fact b { display: block; font-size: 7.8pt; margin-bottom: 1px; }
+  .fact span { color: var(--muted); font-size: 7.2pt; }
+  .fact .n {
+    position: absolute; left: 5px; top: 4px;
+    width: 12px; height: 12px; border-radius: 3px;
+    background: var(--accent); color: #fff;
+    font: 700 6.6pt/12px -apple-system, sans-serif; text-align: center;
+  }
 
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  /* ============ 架构流程 ============ */
+  .flow { display: flex; align-items: stretch; gap: 3px; }
+  .layer {
+    flex: 1; min-width: 0;
+    border: 1px solid var(--line); border-top: 2px solid var(--accent);
+    border-radius: 4px; background: #fff; padding: 4px 5px;
+  }
+  .layer .t { font-size: 7.6pt; font-weight: 700; color: var(--accent); margin-bottom: 1.5px; }
+  .layer .d { font-size: 6.9pt; color: var(--muted); line-height: 1.32; }
+  .arrow {
+    flex: none; width: 26px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1px;
+  }
+  .arrow .glyph { color: var(--accent); font-size: 10pt; line-height: 1; }
+  .arrow .lbl { font-size: 5.9pt; color: var(--muted); text-align: center; line-height: 1.15; }
 
-  .num { font-variant-numeric: tabular-nums; }
-  .hi { background: #fff3d6; font-weight: 600; }
+  /* ============ 指标卡 ============ */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+  .stat {
+    border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px;
+    background: linear-gradient(180deg, var(--accent-soft) 0%, #fff 70%);
+  }
+  .stat .v { font-size: 13pt; font-weight: 700; color: var(--accent); line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 7.5pt; font-weight: 600; margin-left: 1px; }
+  .stat .k { font-size: 7pt; font-weight: 600; margin-top: 1px; }
+  .stat .x { font-size: 6.5pt; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+  .note {
+    border-left: 2px solid var(--good); background: var(--tint);
+    padding: 3px 6px; border-radius: 0 3px 3px 0; font-size: 7pt;
+  }
+  .note b { color: var(--good); }
+  .note.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .note.warn b { color: var(--warn); }
+
+  /* ============ 坑卡片 ============ */
+  .pits { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+  .pit { display: flex; gap: 4px; padding: 2px 0; border-bottom: 1px dotted #e3e8ed; }
+  .pit .n {
+    flex: none; width: 11px; height: 11px; margin-top: 1px;
+    background: var(--accent); color: #fff; border-radius: 2px;
+    font: 700 6.2pt/11px -apple-system, sans-serif; text-align: center;
+  }
+  .pit .body { min-width: 0; }
+  .pit .nm { font-weight: 700; font-size: 7.4pt; }
+  .pit .ds { color: var(--muted); font-size: 6.9pt; line-height: 1.3; }
+  .pit .ds b { color: var(--ink); }
+  .pit.soft .n { background: var(--warn); }
+
+  /* ============ 技术栈 chips ============ */
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .chip {
+    font-size: 6.9pt; padding: 1.5px 6px; border-radius: 999px;
+    border: 1px solid #c8d9e8; background: var(--accent-soft); color: #14527f;
+    white-space: nowrap;
+  }
+  .chip i { font-style: normal; color: var(--muted); }
+
+  /* ============ 边界 ============ */
+  .limit {
+    border: 1px dashed var(--line); border-radius: 4px; background: #fbfcfd;
+    padding: 3.5px 7px; font-size: 6.9pt; color: #3d4a56; line-height: 1.38;
+  }
+  .limit b { color: var(--warn); }
+  .limit span { color: var(--line); margin: 0 2px; }
+
+  /* ============ 页脚 ============ */
   footer {
-    margin-top: 6px; padding-top: 3px; border-top: 0.5px solid #ccc;
-    font-size: 7.4pt; color: #666; display: flex; justify-content: space-between;
+    margin-top: 5px; padding-top: 3px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between;
+    font-size: 6.5pt; color: var(--muted);
   }
+  footer code { font-family: Consolas, monospace; font-size: 6.4pt; color: #3d4a56; }
 
-  .toolbar { position: fixed; right: 14px; top: 14px; }
+  /* ============ 打印控件 ============ */
+  .toolbar { position: fixed; right: 16px; top: 16px; z-index: 9; }
   .toolbar button {
-    font: 9pt -apple-system, "Microsoft YaHei", sans-serif;
-    padding: 6px 14px; border: 1px solid #4a9eff; background: #4a9eff; color: #fff;
-    border-radius: 6px; cursor: pointer;
+    font: 600 9pt -apple-system, "Microsoft YaHei", sans-serif;
+    padding: 7px 16px; border: 0; border-radius: 7px;
+    background: var(--accent); color: #fff; cursor: pointer;
+    box-shadow: 0 2px 10px rgba(22,104,179,.35);
   }
   @media print {
     .toolbar { display: none; }
     h2 { break-after: avoid; }
-    table, pre { break-inside: avoid; }
+    .stats, .flow, .pits { break-inside: avoid; }
   }
 </style>
 </head>
@@ -71,80 +172,152 @@
 
 <div class="toolbar"><button onclick="window.print()">打印 / 存 PDF</button></div>
 
-<h1>工业设备数据采集与在线监测</h1>
-<p class="sub">南向 Modbus（TCP/RTU）→ 统一数据模型（含质量码）→ 时序库 → Web 监测页 · 全链路自建、可一条命令复现</p>
-
-<div class="lead">
-  <b>解决什么问题</b>：工业数据与互联网数据的三点差别，也是本项目的三个工程约束 ——
-  ① 数据在<b>二进制寄存器</b>里（32 位值跨两个 16 位寄存器，<b>四种字节序</b>）② 数据<b>可能不可信</b>（断线不能补 0）
-  ③ 点位约定在<b>厂家手册</b>里（地址/类型/字序/量程全走配置，代码里没有设备私有约定）。
+<!-- ══════════ 页眉 ══════════ -->
+<div class="head">
+  <div class="eyebrow">Industrial Data Acquisition · Project Overview</div>
+  <h1>工业设备数据采集与在线监测</h1>
+  <div class="sub">南向 Modbus（TCP / RTU）→ 统一数据模型（含质量码）→ 时序库 → Web 监测页 · 全链路自建、一条命令可复现</div>
+  <div class="badge">Java 21 · TDengine 3.3 · Spring Boot</div>
 </div>
 
-<h2>架构</h2>
-<pre>  仿真从站 × N ／ 真传感器 × 1
-        │  Modbus TCP(1502) ／ RTU(RS485)
-        ▼
-  collector（Java 21）   DeviceDriver 抽象 ─ TcpModbusDriver ✔ ／ RtuModbusDriver（接口已留）
-                         DeviceSampler ─ 质量码 GOOD/STALE/BAD ＋ 量程校验
-                         每设备一条虚拟线程 ＋ 独立驱动 ＋ 失败退避(1×2×4×8)
-        │  批量 REST（攒 500 点 / 500 ms）
-        ▼
-  TDengine 3.3（WSL2 内免 root 运行）  超级表 telemetry ＋ 每「设备 × 点位」一张子表
-        │  SQL（只读）
-        ▼
-  platform（Spring Boot ＋ ECharts）   /api/overview · /api/latest · /api/series</pre>
-
-<h2>实测指标（100 台 × 4 点位 × 1 Hz × 60 秒）</h2>
-<table>
-  <tr><th style="width:24%">指标</th><th>值</th></tr>
-  <tr><td>采集完整率</td><td class="hi num">100.00%（24000 / 24000，GOOD 24000）</td></tr>
-  <tr><td>入库吞吐</td><td class="hi num">388 点/秒（195 批，每批约 123 点 ⇒ HTTP ≈ 3 次/秒）</td></tr>
-  <tr><td>采集延迟</td><td class="hi num">P50 1.27 ms · P95 4.14 ms · P99 9.95 ms</td></tr>
-  <tr><td>写入失败 / 队列丢弃</td><td class="num">0 / 0</td></tr>
-  <tr><td>断线演练</td><td>值<b>保留上次</b>并标 <b>STALE</b>（不是 0）；采集器<b>不崩</b>，完整率从 100% 平滑降到 61.5%</td></tr>
-  <tr><td>字序证伪</td><td>同一帧 0x704A/0x4280：<b>CDAB → 64.22℃</b>，ABCD → 2.5e29（天文数字）</td></tr>
-</table>
-
-<h2>八个坑（每条都是「我以为是 X，其实是 Y」）</h2>
-<table>
-  <tr><th style="width:3%">#</th><th style="width:17%">坑</th><th>结论</th></tr>
-  <tr><td>0</td><td><b>假数据一眼假</b></td><td><code>random()</code> 是锯齿；真信号要有惯性（一阶低通）＋缓慢漂移＋偶发尖峰＋采样抖动</td></tr>
-  <tr><td>1</td><td><b>寄存器字序</b></td><td>Modbus 只规定寄存器是 16 位，<b>不规定 32 位怎么拆</b>；国内仪表常见 <b>CDAB</b>（字交换）</td></tr>
-  <tr><td>2</td><td><b>40001 vs offset 0</b></td><td>手册的 <code>40001</code> 是 1 基惯用编号，报文传 0 基。混了<b>不是读错值，而是永远超时</b>（报文里 <code>9C 41</code> = 40001）</td></tr>
-  <tr><td>3</td><td><b>断线不是 0</b></td><td>补 0 比没数据更危险 → 必须显式标 STALE（旧值）／BAD（无值），值可以是旧的但<b>必须标"这是旧的"</b></td></tr>
-  <tr><td>4</td><td><b>写不幂等</b></td><td>超时重发会让"触发型"写执行两次。本 demo 可写点只有线圈置位（天然幂等），故<b>只记录、未制造</b></td></tr>
-  <tr><td>5</td><td><b>单设备拖垮采集</b></td><td>三重隔离：线程（虚拟线程）／连接（每设备独立 driver，因为 <code>read()</code> 是 synchronized）／时间（读超时）＋ 失败退避</td></tr>
-  <tr><td>6</td><td><b>时间基准</b></td><td>TDengine 存 UTC、返回带 <code>Z</code>；前端不转时区整张图偏 8 小时。采集端用 <b>epoch 毫秒</b>写入避免歧义</td></tr>
-  <tr><td>7</td><td><b>告警泛滥</b></td><td>实测：10 分钟 3 台设备 <b>836 个越限采样点，但只有 10 次真实越限事件 = 放大 83.6 倍</b>；解法＝持续时间去抖 ＋ 回差 ＋ 分级抑制</td></tr>
-</table>
-
-<h2>技术栈与取舍</h2>
-<div class="two">
-  <table>
-    <tr><th style="width:34%">选择</th><th>为什么</th></tr>
-    <tr><td>Java 21 <b>虚拟线程</b></td><td>100 台设备＝100 条线程，平台线程太重</td></tr>
-    <tr><td><b>j2mod</b></td><td>主站＋从站一体，能自己造仿真设备验证协议</td></tr>
-    <tr><td><b>纯文本点表</b></td><td>厂家点位约定不该写进代码</td></tr>
-  </table>
-  <table>
-    <tr><th style="width:34%">选择</th><th>为什么</th></tr>
-    <tr><td><b>TDengine</b></td><td>工业圈常见；超级表＋子表天然贴合「设备×点位」</td></tr>
-    <tr><td><b>REST 而非 JDBC</b></td><td>免 native 库、可跨 WSL／SSH 隧道；返回自带 <code>column_meta</code></td></tr>
-    <tr><td><b>ECharts 本地副本</b></td><td>离线可跑，不依赖 CDN</td></tr>
-  </table>
+<!-- ══════════ 三个约束 ══════════ -->
+<h2>解决什么问题 <span class="en">the three constraints</span></h2>
+<div class="facts">
+  <div class="fact">
+    <span class="n">1</span>
+    <b>数据在二进制寄存器里</b>
+    <span>32 位值跨两个 16 位寄存器，<b>四种字节序</b>；字序必须按点位配置</span>
+  </div>
+  <div class="fact">
+    <span class="n">2</span>
+    <b>数据可能不可信</b>
+    <span>断线不能补 0（下游会把「0℃」当真值）→ 必须带<b>质量码</b></span>
+  </div>
+  <div class="fact">
+    <span class="n">3</span>
+    <b>点位约定在厂家手册里</b>
+    <span>地址 / 类型 / 字序 / 量程全走配置，<b>代码里没有设备私有约定</b></span>
+  </div>
 </div>
 
-<h2>边界（诚实的部分）</h2>
-<ul>
-  <li><b>不是生产系统</b>：单机、无认证、无高可用、无联锁。</li>
-  <li><b>真传感器尚未接入</b>：当前用仿真从站验证协议链路；<code>RtuModbusDriver</code> 接口已留，硬件到货只换实现。</li>
-  <li><b>北向 MQTT 未实现</b>：页面走 HTTP，架构里预留 <code>iiot/{device}/{point}</code> 的 topic 规范。</li>
-  <li><b>告警模块未实现</b>：坑 7 只有设计（去抖＋回差＋分级），没有代码。</li>
-  <li><b>只有 4 个点位</b>：够验证链路，不够覆盖真实产线（一台设备常几十上百点位）。</li>
-</ul>
+<!-- ══════════ 架构 ══════════ -->
+<h2>架构 <span class="en">architecture</span></h2>
+<div class="flow">
+  <div class="layer">
+    <div class="t">设备层</div>
+    <div class="d">仿真从站 × N<br>真传感器 × 1<br>TCP 1502 / RTU RS485</div>
+  </div>
+  <div class="arrow"><div class="glyph">→</div><div class="lbl">Modbus</div></div>
+  <div class="layer">
+    <div class="t">collector</div>
+    <div class="d">DeviceDriver 抽象<br>质量码 GOOD/STALE/BAD<br>每设备一条虚拟线程<br>失败退避 1×2×4×8</div>
+  </div>
+  <div class="arrow"><div class="glyph">→</div><div class="lbl">REST<br>500 点 / 500 ms</div></div>
+  <div class="layer">
+    <div class="t">TDengine 3.3</div>
+    <div class="d">超级表 telemetry<br>每「设备×点位」子表<br>WSL2 内免 root 运行</div>
+  </div>
+  <div class="arrow"><div class="glyph">→</div><div class="lbl">SQL<br>只读</div></div>
+  <div class="layer">
+    <div class="t">platform</div>
+    <div class="d">Spring Boot + ECharts<br>/api/overview<br>/api/latest · /api/series</div>
+  </div>
+</div>
+
+<!-- ══════════ 实测指标 ══════════ -->
+<h2>实测指标 <span class="en">100 devices × 4 points × 1 Hz × 60 s</span></h2>
+<div class="stats">
+  <div class="stat">
+    <div class="v">100.00<small>%</small></div>
+    <div class="k">采集完整率</div>
+    <div class="x">24000 / 24000 · GOOD</div>
+  </div>
+  <div class="stat">
+    <div class="v">388<small>点/秒</small></div>
+    <div class="k">入库吞吐</div>
+    <div class="x">195 批 · 每批约 123 点</div>
+  </div>
+  <div class="stat">
+    <div class="v">9.95<small>ms</small></div>
+    <div class="k">采集延迟 P99</div>
+    <div class="x">P50 1.27 · P95 4.14</div>
+  </div>
+  <div class="stat">
+    <div class="v">0<small>/ 0</small></div>
+    <div class="k">写入失败 / 丢弃</div>
+    <div class="x">HTTP 约 3 次/秒</div>
+  </div>
+</div>
+<div class="duo">
+  <div class="note">
+    <b>断线演练</b>　值<b>保留上次</b>并标 STALE（不是 0）；采集器<b>不崩</b>，完整率从 100% 平滑降到 61.5%
+  </div>
+  <div class="note warn">
+    <b>字序证伪</b>　同一帧 0x704A/0x4280：CDAB 解出 <b>64.22℃</b>，ABCD 解出 2.5e29（天文数字）
+  </div>
+</div>
+
+<!-- ══════════ 八个坑 ══════════ -->
+<h2>八个坑 <span class="en">each one is “I thought X, actually Y”</span></h2>
+<div class="pits">
+  <div class="pit"><div class="n">0</div><div class="body">
+    <span class="nm">假数据一眼假</span>
+    <div class="ds"><code>random()</code> 是锯齿；真信号要有<b>惯性＋漂移＋尖峰＋采样抖动</b></div>
+  </div></div>
+  <div class="pit"><div class="n">1</div><div class="body">
+    <span class="nm">寄存器字序</span>
+    <div class="ds">Modbus <b>不规定 32 位怎么拆</b>；四种字节序，国内仪表常见 <b>CDAB</b></div>
+  </div></div>
+  <div class="pit"><div class="n">2</div><div class="body">
+    <span class="nm">40001 vs offset 0</span>
+    <div class="ds">1 基惯用编号 vs 0 基协议地址；混了<b>不是读错值，是永远超时</b>（报文 <code>9C 41</code>）</div>
+  </div></div>
+  <div class="pit"><div class="n">3</div><div class="body">
+    <span class="nm">断线不是 0</span>
+    <div class="ds">补 0 比没数据更危险 → 必须显式标 <b>STALE</b>（旧值）/ <b>BAD</b>（无值）</div>
+  </div></div>
+  <div class="pit soft"><div class="n">4</div><div class="body">
+    <span class="nm">写操作不幂等</span>
+    <div class="ds">触发型写重发会执行两次；本 demo 只有线圈置位（天然幂等），<b>只记录、未制造</b></div>
+  </div></div>
+  <div class="pit"><div class="n">5</div><div class="body">
+    <span class="nm">单设备拖垮采集</span>
+    <div class="ds"><b>线程 / 连接 / 时间</b>三重隔离（每设备独立 driver，因 <code>read()</code> synchronized）＋ 退避</div>
+  </div></div>
+  <div class="pit"><div class="n">6</div><div class="body">
+    <span class="nm">时间基准</span>
+    <div class="ds">TDengine 存 UTC、返回带 <code>Z</code>；不转时区整张图<b>偏 8 小时</b>。采集端用 <b>epoch 毫秒</b></div>
+  </div></div>
+  <div class="pit"><div class="n">7</div><div class="body">
+    <span class="nm">告警泛滥</span>
+    <div class="ds">10 分钟 836 个越限采样点 vs <b>仅 10 次真实事件 = 放大 83.6 倍</b>；解法＝去抖＋回差＋分级</div>
+  </div></div>
+</div>
+
+<!-- ══════════ 技术栈 ══════════ -->
+<h2>技术栈与取舍 <span class="en">stack &amp; trade-offs</span></h2>
+<div class="chips">
+  <span class="chip">Java 21 <i>· 虚拟线程处理 100 设备</i></span>
+  <span class="chip">j2mod <i>· 主站+从站一体</i></span>
+  <span class="chip">纯文本点表 <i>· 点位约定不进代码</i></span>
+  <span class="chip">TDengine <i>· 超级表贴合设备×点位</i></span>
+  <span class="chip">REST 而非 JDBC <i>· 免 native 库，可跨隧道</i></span>
+  <span class="chip">Spring Boot 3.2 <i>· 只读平台</i></span>
+  <span class="chip">ECharts 本地副本 <i>· 离线可跑</i></span>
+</div>
+
+<!-- ══════════ 边界 ══════════ -->
+<h2>边界 <span class="en">honest limits</span></h2>
+<div class="limit">
+  <b>不是生产系统</b>（单机 · 无认证 · 无高可用 · 无联锁）
+  <span>│</span> <b>真传感器尚未接入</b>：当前用仿真从站验证协议链路，<code>RtuModbusDriver</code> 接口已留
+  <span>│</span> <b>北向 MQTT 未实现</b>：页面走 HTTP，架构预留 <code>iiot/{device}/{point}</code> topic 规范
+  <span>│</span> <b>告警模块未实现</b>：坑 7 只有设计（去抖＋回差＋分级）
+  <span>│</span> 只有 4 个点位，够验证链路、不够覆盖真实产线
+</div>
 
 <footer>
-  <span>采集端 <code>collector/</code> · 平台 <code>platform/</code> · 坑记录 <code>docs/pitfalls.md</code></span>
+  <span><code>collector/</code> 采集端　<code>platform/</code> 只读平台　<code>docs/pitfalls.md</code> 八个坑的实测过程</span>
   <span>2026-10</span>
 </footer>
 
