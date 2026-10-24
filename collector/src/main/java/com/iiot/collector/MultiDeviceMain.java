@@ -8,7 +8,7 @@ import com.iiot.collector.core.DeviceSampler;
 import com.iiot.collector.core.PointTableLoader;
 import com.iiot.collector.core.PointValue;
 import com.iiot.collector.core.TelemetryRepository;
-import com.iiot.collector.driver.TcpModbusDriver;
+import com.iiot.collector.driver.DriverRegistry;
 import com.iiot.collector.core.AlarmEngine;
 import com.iiot.collector.repo.CountingTelemetryRepository;
 import com.iiot.collector.north.MqttPublisher;
@@ -97,6 +97,8 @@ public final class MultiDeviceMain {
         // A/B 模式：同一批采样点同时喂给「去抖」和「不去抖」两个引擎 ——
         // 保证对比的是"配置差异"，不是"两次运行的信号差异"。
         final MqttPublisher mqtt = createMqttPublisher(args);
+        // 驱动按"物理链路"复用：RTU 一个 COM 口只能打开一次，总线上所有 unitId 共用一条连接
+        final DriverRegistry drivers = new DriverRegistry(timeoutMillis);
         final AlarmEngine strictAlarms;
         if (alarms != null && hasFlag(args, "--alarm-ab")) {
             strictAlarms = strictAlarmEngine();
@@ -132,7 +134,7 @@ public final class MultiDeviceMain {
         for (DeviceConfig config : configs) {
             executor.submit(() -> {
                 try {
-                    runDevice(config, repository, stats, alarms, strictAlarms, mqtt, timeoutMillis, maxCycles,
+                    runDevice(config, repository, stats, alarms, strictAlarms, mqtt, drivers, timeoutMillis, maxCycles,
                             deadline, intervalOverride, stop, echo);
                 } finally {
                     allDone.countDown();
@@ -192,6 +194,7 @@ public final class MultiDeviceMain {
         if (mqtt != null) {
             mqtt.close();
         }
+        drivers.close();
     }
 
     /** 对照组：完全不设防（持续 0ms、回差 0）—— 等价于"每个越限采样点都报警"。 */
@@ -288,6 +291,7 @@ public final class MultiDeviceMain {
                                   AlarmEngine alarms,
                                   AlarmEngine strictAlarms,
                                   MqttPublisher mqtt,
+                                  DriverRegistry drivers,
                                   int timeoutMillis,
                                   int maxCycles,
                                   long deadline,
@@ -298,8 +302,9 @@ public final class MultiDeviceMain {
         int consecutiveFailures = 0;
         int done = 0;
 
-        // 每台设备一个独立驱动：连接/锁/超时都隔离
-        try (DeviceDriver driver = new TcpModbusDriver(timeoutMillis)) {
+        // 从注册表拿驱动：RTU 返回同一条共享连接（一个 COM 口只能打开一次），TCP 每台独立
+        DeviceDriver driver = drivers.driverFor(config.endpoint());
+        try {
             DeviceSampler sampler = new DeviceSampler(config, driver);
             while (!stop.get() && !Thread.currentThread().isInterrupted()) {
                 long startedAt = System.nanoTime();

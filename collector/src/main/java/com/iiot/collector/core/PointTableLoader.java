@@ -66,12 +66,18 @@ public final class PointTableLoader {
 
         Set<String> deviceIds = new TreeSet<>();
         for (String key : props.stringPropertyNames()) {
-            if (key.startsWith(PREFIX) && key.endsWith(".host")) {
+            if (!key.startsWith(PREFIX)) {
+                continue;
+            }
+            // TCP 用 .host，RTU 用 .comPort（也兼容写成 .host=COM3）
+            if (key.endsWith(".host")) {
                 deviceIds.add(key.substring(PREFIX.length(), key.length() - ".host".length()));
+            } else if (key.endsWith(".comPort")) {
+                deviceIds.add(key.substring(PREFIX.length(), key.length() - ".comPort".length()));
             }
         }
         if (deviceIds.isEmpty()) {
-            throw new IOException("点表里没有任何 device.<id>.host 条目");
+            throw new IOException("点表里没有任何 device.<id>.host 或 .comPort 条目");
         }
 
         List<DeviceConfig> configs = new ArrayList<>(deviceIds.size());
@@ -83,11 +89,32 @@ public final class PointTableLoader {
 
     private static DeviceConfig parseDevice(Properties props, String deviceId) throws IOException {
         String base = PREFIX + deviceId + ".";
-        String host = required(props, base + "host");
-        int port = intValue(props, base + "port");
         int unitId = intValue(props, base + "unitId");
         long periodMillis = intValue(props, base + "periodMillis");
         String pointList = required(props, base + "points");
+        String portType = props.getProperty(base + "portType", "tcp").trim().toLowerCase();
+
+        DeviceEndpoint endpoint;
+        if ("rtu".equals(portType) || "serial".equals(portType)) {
+            // RTU：host 就是 COM 口名；port 无意义
+            String comPort = firstNonBlank(props.getProperty(base + "comPort"),
+                    props.getProperty(base + "host"));
+            if (comPort == null) {
+                throw new IOException("设备 " + deviceId + " 是 RTU，但缺少 comPort（或 host）");
+            }
+            SerialSettings serial = new SerialSettings(
+                    optionalInt(props, base + "baudRate", SerialSettings.DEFAULT_BAUD),
+                    optionalInt(props, base + "dataBits", 8),
+                    optionalInt(props, base + "stopBits", 1),
+                    props.getProperty(base + "parity", "none"),
+                    optionalBoolean(props, base + "rs485Mode", false));
+            endpoint = DeviceEndpoint.rtu(deviceId, comPort, unitId, serial);
+        } else if ("tcp".equals(portType)) {
+            endpoint = DeviceEndpoint.tcp(deviceId, required(props, base + "host"),
+                    intValue(props, base + "port"), unitId);
+        } else {
+            throw new IOException("设备 " + deviceId + " 的 portType 只能是 tcp 或 rtu，实际: " + portType);
+        }
 
         List<PointDef> points = new ArrayList<>();
         for (String raw : pointList.split(",")) {
@@ -97,15 +124,42 @@ public final class PointTableLoader {
             }
         }
 
-        DeviceConfig config = new DeviceConfig(
-                DeviceEndpoint.tcp(deviceId, host, port, unitId),
-                List.copyOf(points),
-                periodMillis);
+        DeviceConfig config = new DeviceConfig(endpoint, List.copyOf(points), periodMillis);
         String problem = config.validate();
         if (problem != null) {
             throw new IOException("设备 " + deviceId + " 点表不合法: " + problem);
         }
         return config;
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a.trim();
+        }
+        if (b != null && !b.isBlank()) {
+            return b.trim();
+        }
+        return null;
+    }
+
+    private static int optionalInt(Properties props, String key, int fallback) throws IOException {
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new IOException("配置项 " + key + " 需要整数，实际是: " + value);
+        }
+    }
+
+    private static boolean optionalBoolean(Properties props, String key, boolean fallback) {
+        String value = props.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return Boolean.parseBoolean(value.trim());
     }
 
     private static PointDef parsePoint(Properties props, String deviceId, String pointId) throws IOException {

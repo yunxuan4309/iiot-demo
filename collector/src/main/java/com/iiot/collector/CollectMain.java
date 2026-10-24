@@ -1,6 +1,7 @@
 package com.iiot.collector;
 
 import com.iiot.collector.core.DeviceConfig;
+import com.iiot.collector.core.DeviceDriver;
 import com.iiot.collector.core.DeviceSampler;
 import com.iiot.collector.core.PointDef;
 import com.iiot.collector.core.PointTableLoader;
@@ -71,7 +72,10 @@ public final class CollectMain {
         }
 
         int done = 0;
-        try (TcpModbusDriver driver = new TcpModbusDriver(timeoutMillis)) {
+        // 按 endpoint 选驱动（TCP / RTU），单设备场景也用注册表，保证两种传输走同一套代码
+        try (com.iiot.collector.driver.DriverRegistry registry =
+                     new com.iiot.collector.driver.DriverRegistry(timeoutMillis)) {
+            DeviceDriver driver = registry.driverFor(config.endpoint());
             DeviceSampler sampler = new DeviceSampler(config, driver);
             while (true) {
                 long startedAt = System.nanoTime();

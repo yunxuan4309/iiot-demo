@@ -1,6 +1,9 @@
 package com.iiot.collector;
 
+import com.ghgande.j2mod.modbus.facade.AbstractModbusMaster;
+import com.ghgande.j2mod.modbus.facade.ModbusSerialMaster;
 import com.ghgande.j2mod.modbus.facade.ModbusTCPMaster;
+import com.ghgande.j2mod.modbus.util.SerialParameters;
 import com.ghgande.j2mod.modbus.procimg.Register;
 import com.ghgande.j2mod.modbus.util.BitVector;
 import com.iiot.collector.proto.WordOrder;
@@ -39,12 +42,44 @@ public final class ProbeMain {
         int timeoutMillis = intArg(args, "--timeout", 3000);
         String writeMotor = stringArg(args, "--write-motor", null);
 
-        ModbusTCPMaster master = new ModbusTCPMaster(host, port, timeoutMillis, false);
-        System.out.printf("连接 %s:%d（unit=%d, timeout=%d ms）...%n", host, port, unitId, timeoutMillis);
+        // 串口模式：--com COM3（给了就走 RTU，不给就走 TCP）
+        String comPort = stringArg(args, "--com", null);
+        int baudRate = intArg(args, "--baud", 9600);
+        int dataBits = intArg(args, "--data-bits", 8);
+        int stopBits = intArg(args, "--stop-bits", 1);
+        String parity = stringArg(args, "--parity", "none");
+        boolean rs485Mode = hasFlag(args, "--rs485-mode");
+
+        AbstractModbusMaster master;
+        if (comPort != null) {
+            SerialParameters params = new SerialParameters();
+            params.setPortName(comPort);
+            params.setBaudRate(baudRate);
+            params.setDatabits(dataBits);
+            params.setStopbits(stopBits);
+            params.setParity(parity);
+            params.setEncoding("rtu");
+            params.setEcho(false);
+            if (rs485Mode) {
+                params.setRs485Mode(true);
+                params.setRs485TxEnableActiveHigh(true);
+            }
+            master = new ModbusSerialMaster(params, timeoutMillis);
+            System.out.printf("连接 %s（%d-%d-%s-%d, unit=%d, timeout=%d ms）...%n",
+                    comPort, baudRate, dataBits, parity.substring(0, 1).toUpperCase(), stopBits,
+                    unitId, timeoutMillis);
+        } else {
+            master = new ModbusTCPMaster(host, port, timeoutMillis, false);
+            System.out.printf("连接 %s:%d（unit=%d, timeout=%d ms）...%n", host, port, unitId, timeoutMillis);
+        }
         try {
             master.connect();
         } catch (Exception e) {
-            printOfflineHint(host, port, e);
+            if (comPort != null) {
+                printSerialHint(comPort, baudRate, parity, e);
+            } else {
+                printOfflineHint(host, port, e);
+            }
             System.exit(3);
             return;
         }
@@ -69,7 +104,7 @@ public final class ProbeMain {
         }
     }
 
-    private static void readAndExplain(ModbusTCPMaster master, int unitId) throws Exception {
+    private static void readAndExplain(AbstractModbusMaster master, int unitId) throws Exception {
         long startedAt = System.nanoTime();
         Register[] registers = master.readMultipleRegisters(unitId, SimDevice.REG_TEMP, 4);
         long costMillis = (System.nanoTime() - startedAt) / 1_000_000L;
@@ -146,12 +181,32 @@ public final class ProbeMain {
                 + "java -jar collector\\target\\collector-0.1.0-SNAPSHOT.jar --port 1502");
     }
 
+/** RTU 连不上时的排查提示 —— 顺序很重要：前四项都不是代码问题。 */
+    private static void printSerialHint(String comPort, int baudRate, String parity, Exception e) {
+        System.out.println();
+        System.out.println("打不开串口 " + comPort + "（" + baudRate + "-8-" + parity + "-1）：" + e.getMessage());
+        System.out.println();
+        System.out.println("按现场顺序排除（前四项都不是代码问题）：");
+        System.out.println("  1. COM 口对吗？PowerShell: [System.IO.Ports.SerialPort]::GetPortNames()");
+        System.out.println("  2. 驱动装了吗？设备管理器 → 端口 → USB Serial Port (COMx)");
+        System.out.println("  3. 串口被别的软件占用？（Modbus Poll / 组态软件 / 之前没退干净的进程）");
+        System.out.println("  4. A/B 接反了吗？对调再试；GND 共地了吗？");
+        System.out.println("  5. 波特率/校验位和仪表一致吗？（出厂常见 9600-8-N-1）");
+        System.out.println("  6. 从站地址对吗？（出厂常见 1，范围 1~247）");
+    }
+
     private static void printUsage() {
         System.out.println("""
                 Modbus 探测：读一遍点位、猜字序、可选写线圈
 
                   --host <s>          主机，默认 127.0.0.1
                   --port <n>          端口，默认 1502
+                  --com <COMx>        串口（给这个参数就走 RTU，忽略 --host/--port）
+                  --baud <n>          波特率，默认 9600
+                  --parity <s>        校验位 none/even/odd，默认 none
+                  --data-bits <n>     数据位，默认 8
+                  --stop-bits <n>     停止位，默认 1
+                  --rs485-mode        芯片级 485 方向控制（仅板载原生 485 口；USB 转换器不要开）
                   --unit <n>          从站号，默认 1
                   --timeout <ms>      超时，默认 3000
                   --write-motor <b>   写 motor_running（true/false），默认不写

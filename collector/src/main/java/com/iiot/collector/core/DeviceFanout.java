@@ -48,7 +48,9 @@ public final class DeviceFanout {
                     template.endpoint().protocol(),
                     template.endpoint().host(),
                     template.endpoint().port(),
-                    unitId);
+                    unitId,
+                    // RTU 的串口参数要一起复制：扇出的是"同一条总线上的不同从站地址"
+                    template.endpoint().serial());
             devices.add(new DeviceConfig(endpoint, template.points(), template.periodMillis()));
         }
         return devices;
