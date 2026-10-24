@@ -40,13 +40,27 @@ public final class SimDevice {
     private final WordOrder hoursOrder;
     private final TempSignal temp;
 
-    private final SimpleProcessImage image;
+    private final HangableImage image;
     private final SimpleRegister tempHi = new SimpleRegister(0);
     private final SimpleRegister tempLo = new SimpleRegister(0);
     private final SimpleRegister hoursHi = new SimpleRegister(0);
     private final SimpleRegister hoursLo = new SimpleRegister(0);
     private final SimpleDigitalOut coilMotor = new SimpleDigitalOut(false);
     private final SimpleDigitalIn inputAlarm = new SimpleDigitalIn(false);
+
+    /** 让这台设备"卡死"（连上但不回包）—— 用于验证单台挂死不影响其他台。 */
+    public void setHanging(boolean hanging) {
+        image.setHanging(hanging);
+    }
+
+    public boolean isHanging() {
+        return image.isHanging();
+    }
+
+    /** 写请求执行后延迟回包（超过客户端超时 = 客户端以为失败，但设备已经动了）。 */
+    public void setWriteAckDelayMillis(long millis) {
+        image.setWriteAckDelayMillis(millis);
+    }
 
     /** 设备已运行时长（小时）。开局就是 1234.5 h，像一台跑了一个多月的设备，而不是刚开机。 */
     private double runtimeHours = 1234.5;
@@ -67,7 +81,7 @@ public final class SimDevice {
         this.temp = new TempSignal(baseTemperatureC, spikeProbability);
         this.temperatureC = baseTemperatureC;
 
-        this.image = new SimpleProcessImage(unitId);
+        this.image = new HangableImage(unitId);
         image.addRegister(REG_TEMP, tempHi);
         image.addRegister(REG_TEMP + 1, tempLo);
         image.addRegister(REG_HOURS, hoursHi);

@@ -54,6 +54,11 @@ public final class SimSlaveMain {
         // 尖峰概率：演示「告警去抖」时调高（如 0.10），让信号频繁短暂越限
         double spikeProbability = doubleArg(args, "--spike-prob", 0.005);
         boolean quiet = hasFlag(args, "--quiet");
+        // 故障演练：让某一个 unit 在 N 秒后"卡死"（连上但不回包），其他 unit 不受影响
+        int hangUnit = intArg(args, "--hang-unit", 0);
+        int hangAfterSeconds = intArg(args, "--hang-after", 0);
+        // 写确认延迟：写请求照常执行，但把应答拖过客户端超时（坑 4 的复现手段）
+        long writeDelayMillis = intArg(args, "--write-delay-ms", 0);
 
         if (deviceCount <= 0) {
             System.err.println("--devices 必须 >= 1");
@@ -85,6 +90,45 @@ public final class SimSlaveMain {
             System.out.println("[从站] 收到停止信号，关闭监听 → 采集端此时应当看到超时，而不是 0 值");
             ModbusSlaveFactory.close(slave);
         }, "slave-shutdown"));
+
+        // ── 故障注入 ──
+        if (writeDelayMillis > 0) {
+            for (SimDevice device : devices) {
+                device.setWriteAckDelayMillis(writeDelayMillis);
+            }
+            System.out.printf("[从站] 写应答延迟 %d ms —— 写会真的执行，但客户端会超时（坑 4）%n",
+                    writeDelayMillis);
+        }
+        if (hangUnit > 0) {
+            SimDevice target = null;
+            for (SimDevice device : devices) {
+                if (device.unitId() == hangUnit) {
+                    target = device;
+                    break;
+                }
+            }
+            if (target == null) {
+                System.err.printf("[从站] --hang-unit %d 不在 unitId %d..%d 范围内%n",
+                        hangUnit, firstUnitId, firstUnitId + deviceCount - 1);
+            } else if (hangAfterSeconds <= 0) {
+                target.setHanging(true);
+                System.out.printf("[从站] unit=%d 立即进入【卡死】状态：连接还在，但不回包%n", hangUnit);
+            } else {
+                SimDevice victim = target;
+                Thread.ofVirtual().name("hang-scheduler").start(() -> {
+                    try {
+                        Thread.sleep(hangAfterSeconds * 1000L);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    victim.setHanging(true);
+                    System.out.printf("%n[从站] %d 秒到：unit=%d 进入【卡死】状态 —— 该台会一直超时，其他台应照常%n%n",
+                            hangAfterSeconds, hangUnit);
+                });
+                System.out.printf("[从站] unit=%d 将在 %d 秒后进入【卡死】状态%n", hangUnit, hangAfterSeconds);
+            }
+        }
 
         slave.open();
 
@@ -125,6 +169,9 @@ public final class SimSlaveMain {
                   --hours-order <o>   runtime_hours 的字序，默认 ABCD
                   --base-temp <f>     温度基准值，默认 62.0（想演练告警可设 79）
                   --spike-prob <f>    单点尖峰概率，默认 0.005；演示告警去抖时调高到 0.10
+                  --hang-unit <id>    让这个 unitId 进入【卡死】：连接在、但不回包（坑 5）
+                  --hang-after <sec>  启动后多少秒再卡死，默认 0 = 立即
+                  --write-delay-ms <n> 写给应答延迟（超过读超时即复现坑 4：写成功但客户端以为失败）
                   --quiet             不打印每周期状态
                   --help              显示本帮助
 
