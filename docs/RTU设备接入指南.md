@@ -12,10 +12,10 @@
 | 1 | 装 USB-485 驱动（FT232 → VCP） | 人 | 设备管理器看有没有 `USB Serial Port (COMx)` | 待硬件 |
 | 2 | 接 12V 电源 + 485 线（A→A，B→B） | 人 | 见 §2 接线 | 待硬件 |
 | 3 | 查 COM 口号 | 人 | `[System.IO.Ports.SerialPort]::GetPortNames()` | ✅ 可用 |
-| 4 | **探测能不能读到**（含四种字序对比） | 人 | `collector\run-probe.cmd --com COM3 --baud 9600` | ⏳ **驱动待实现** |
+| 4 | **探测能不能读到**（含四种字序对比） | 人 | `collector\run-probe.cmd --com COM3 --baud 9600` | ✅ **已实现** |
 | 5 | 确认从站地址 / 波特率 / 校验位 | 人 | 看厂家手册；探测失败时逐个试 | 待硬件 |
-| 6 | 填点表 `points-rtu.properties` | 人 | 见 §5，改 COM/波特率/字序/量程 | ⏳ **点表待支持串口** |
-| 7 | 采集一次（不存库） | 人 | `collector\run-collect.cmd --points points-rtu.properties --cycles 5` | ⏳ **驱动待实现** |
+| 6 | 填点表 `points-rtu.properties` | 人 | 见 §5，改 COM/波特率/字序/量程（模板已就绪） | ✅ **已实现** |
+| 7 | 采集一次（不存库） | 人 | `collector\run-collect.cmd --points points-rtu.properties --cycles 5` | ✅ **已实现** |
 | 8 | 采集 + 写 TDengine | 人 | `collector\run-multi-tdengine.cmd --points points-rtu.properties --fanout 1` | ⏳ |
 | 9 | 页面看到数据 | 人 | `platform\run-platform.cmd` → `localhost:8080` | ✅ |
 | 10 | 拔线演练（拔 485 线 → 应变 STALE 不是 0） | 人 | 看采集端输出 | ✅ 逻辑已就绪 |
@@ -186,11 +186,13 @@ device.rtu-01.point.humidity.max=100
 
 ## 九、当前缺什么（2026-10-24 状态）
 
-| # | 缺口 | 影响 | 估时 |
-|---|---|---|---|
-| 1 | **`RtuModbusDriver`** 未实现 | 读不了串口设备 | 60~90 min |
-| 2 | **点表不支持串口参数**（只有 host/port） | 配不了 COM 口 | 20 min |
-| 3 | **`ProbeMain` 不支持 `--com`** | 现场没法探测 | 30 min |
-| 4 | 虚拟串口自测（com0com） | 硬件到前无法端到端验证 | 30 min（需装工具） |
+| # | 缺口 | 状态 |
+|---|---|---|
+| 1 | **`RtuModbusDriver`** | ✅ **已实现**（`ModbusSerialMaster` + `SerialParameters`，含 RS485 方向控制开关） |
+| 2 | **点表支持串口参数** | ✅ **已实现**（`portType=rtu` + `comPort/baudRate/dataBits/stopBits/parity/rs485Mode`；模板 `points-rtu.properties` 已就绪） |
+| 3 | **`ProbeMain --com`** | ✅ **已实现**（`--com/--baud/--parity/--data-bits/--stop-bits/--rs485-mode`，失败时打印 RTU 六步排查） |
+| 4 | **一条 COM 口只能打开一次** | ✅ **已解决**：新增 `DriverRegistry`，按「物理链路」复用驱动 —— RTU 总线上所有 unitId 共用一条连接（半双工请求串行） |
+| 5 | **虚拟串口自测（com0com）** | ⏳ **待做** —— 需要装 com0com（管理员）；用第三方 Modbus 模拟器作从站，**不碰我们的仿真从站** |
+| 6 | TCP 回归 | ✅ **已验证**：重构后 10 台 600 点仍 **100%**（0 失败） |
 
-> **⇒ 这四项做完，"设备到了简单了解就能接入"才成立。**
+> **⇒ 1~4 + 6 已完成，「设备到了简单了解就能接入」的代码侧已就绪；只剩第 5 项（硬件到前的额外保险）。**
