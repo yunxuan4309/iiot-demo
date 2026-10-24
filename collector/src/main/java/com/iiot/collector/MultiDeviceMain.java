@@ -10,6 +10,7 @@ import com.iiot.collector.core.PointValue;
 import com.iiot.collector.core.TelemetryRepository;
 import com.iiot.collector.driver.TcpModbusDriver;
 import com.iiot.collector.repo.CountingTelemetryRepository;
+import com.iiot.collector.repo.TdengineTelemetryRepository;
 
 import java.nio.file.Path;
 import java.time.LocalTime;
@@ -69,6 +70,13 @@ public final class MultiDeviceMain {
         int reportEverySeconds = intArg(args, "--report-every", 5);
         boolean verbose = hasFlag(args, "--verbose");
 
+        // 存储后端：counting（不落盘，用来建立采集端基线）| tdengine（真库）
+        String store = stringArg(args, "--store", "counting");
+        String tdUrl = stringArg(args, "--td-url", "http://localhost:6041");
+        String tdDb = stringArg(args, "--td-db", "iiot");
+        String tdUser = stringArg(args, "--td-user", "root");
+        String tdPass = stringArg(args, "--td-pass", "taosdata");
+
         List<DeviceConfig> base = pointsFile == null
                 ? PointTableLoader.loadFromClasspath("/points.properties")
                 : PointTableLoader.loadFromFile(Path.of(pointsFile));
@@ -79,7 +87,7 @@ public final class MultiDeviceMain {
 
         int pointsPerDevice = configs.get(0).points().size();
         CollectStats stats = new CollectStats(pointsPerDevice, 200_000);
-        TelemetryRepository repository = new CountingTelemetryRepository();
+        TelemetryRepository repository = createRepository(store, tdUrl, tdDb, tdUser, tdPass);
 
         System.out.printf("多设备采集启动：%d 台 × %d 点 · 周期 %d ms · 读超时 %d ms%n",
                 configs.size(), pointsPerDevice,
@@ -135,6 +143,20 @@ public final class MultiDeviceMain {
         repository.close();
 
         System.out.print(stats.report());
+        if (repository instanceof TdengineTelemetryRepository tdengine) {
+            System.out.println(tdengine.summaryLine());
+        }
+    }
+
+    /** 按 {@code --store} 选存储实现 —— 换库只改这一处，采集逻辑一行不动。 */
+    private static TelemetryRepository createRepository(String store, String url, String db,
+                                                       String user, String password) {
+        return switch (store.toLowerCase()) {
+            case "tdengine", "td" -> new TdengineTelemetryRepository(url, db, user, password);
+            case "counting", "count", "none" -> new CountingTelemetryRepository();
+            default -> throw new IllegalArgumentException(
+                    "未知存储 --store " + store + "（可选 counting / tdengine）");
+        };
     }
 
     /** 等到：全部设备跑完 cycles / 到 deadline / 被中断。 */
@@ -243,6 +265,15 @@ public final class MultiDeviceMain {
                   --timeout <ms>       单次读超时，默认 2000
                   --report-every <sec> 进度打印间隔，默认 5
                   --verbose            设备多时也逐台打印
+
+                存储（--store）：
+                  counting             不落盘，只计数（默认，用来建立采集端基线）
+                  tdengine             写入 TDengine（REST 接口）
+                    --td-url   <url>    默认 http://localhost:6041
+                    --td-db    <name>   默认 iiot
+                    --td-user  <name>   默认 root
+                    --td-pass  <pass>   默认 taosdata
+
                   --help               显示本帮助
                 """);
     }
