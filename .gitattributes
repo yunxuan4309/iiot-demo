@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────
+# 语言统计修正
+#
+# GitHub Linguist 把 IEC 61131-3 的源文件认错了：
+#   *.ld  →  "Linker Script"（实际是梯形图 Ladder Diagram）
+#   *.st  →  "Smalltalk"    （实际是结构化文本 Structured Text）
+#
+# 它们不是"编程语言占比"，只是 PLC 程序，排除掉之后
+# 仓库页的语言条只保留 Java / HTML。
+# ─────────────────────────────────────────────────────────────
+pous/programs/*.ld linguist-detectable=false
+pous/programs/*.st linguist-detectable=false
+
+# ─────────────────────────────────────────────────────────────
+# 说明：这里刻意不写 eol 规则。
+# 本仓库 core.autocrlf=true（Windows 默认），若在此声明
+# `*.cmd text eol=crlf` 之类的规则，会触发一次全仓库重新规范化，
+# 产生一个几百文件的空 diff。换行符目前由 .cmd 脚本自身保证 CRLF。
+# ─────────────────────────────────────────────────────────────
+
+# 二进制文件：不做文本 diff
+*.png binary
+*.project binary
