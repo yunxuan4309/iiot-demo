@@ -195,6 +195,11 @@ async function refreshOverview() {
   $('kpiPoints').textContent = (o.totalPoints ?? 0).toLocaleString();
   $('kpiGood').innerHTML = (o.goodRate == null ? '–' : o.goodRate.toFixed(2) + '<small>%</small>');
   $('kpiLatest').textContent = localDateTime(o.latestTs);
+  // ★ 新鲜度：有设备的数据已经过期（采集端停了 / 网断了）→ 必须显式告警，否则大屏会"安静地骗人"
+  if (o.staleDevices > 0) {
+    $('kpiLatest').innerHTML = localDateTime(o.latestTs)
+      + `<div style="font-size:11px;color:var(--stale);margin-top:2px">⚠ ${o.staleDevices} 台数据已过期（>${o.staleAfterSeconds ?? 15}s 未更新）</div>`;
+  }
 
   pieChart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -228,12 +233,16 @@ async function refreshLatest() {
     const m = r.points.motor_running || {};
     const alarmOn = Number(a.val) > 0;
     const motorOn = Number(m.val) > 0;
-    const state = alarmOn ? '<span style="color:#ff5252">报警</span>'
+    // 数据过期优先于"报警/运行/停机"—— 一个不动的旧值比一个报警更危险
+    const stale = r.stale === true || t.stale === true;
+    const age = t.ageSeconds == null ? '' : ` ${t.ageSeconds}s`;
+    const state = stale ? `<span style="color:var(--stale)">⚠ 数据过期${age}</span>`
+                : alarmOn ? '<span style="color:#ff5252">报警</span>'
                 : motorOn ? '<span style="color:#3ddc84">运行</span>' : '<span style="color:#7b8a99">停机</span>';
     const q = t.quality || '–';
     return `<tr data-device="${r.device}" class="${r.device === selectedDevice ? 'active' : ''}">
       <td>${r.device}</td>
-      <td>${t.val == null ? '–' : Number(t.val).toFixed(2)} ℃</td>
+      <td${stale ? ' style="color:var(--dim)"' : ''}>${t.val == null ? '–' : Number(t.val).toFixed(2)} ℃</td>
       <td>${state}</td>
       <td><span class="q ${q}">${q}</span></td>
     </tr>`;

@@ -2,6 +2,7 @@ package com.iiot.platform.web;
 
 import com.iiot.platform.tdengine.TdengineClient;
 import com.iiot.platform.tdengine.TdengineClient.TdengineException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,8 +36,22 @@ public class TelemetryController {
 
     private final TdengineClient td;
 
-    public TelemetryController(TdengineClient td) {
+    /**
+     * 数据"过期"阈值（秒）：最新点的时刻距今超过这个值，就认为数据不再新鲜。
+     *
+     * <p><b>为什么必须做这个判断</b>：库里存的是"写进去那一刻的事实"——
+     * 采集端停了、网断了、进程被杀了，库里最后一条**仍然是 GOOD**。
+     * 如果页面照原样显示，就变成"**一个数字永远不动，但看起来一切正常**"。
+     * 现场的坑就是这样：值班员以为系统正常，其实采集早挂了。
+     *
+     * <p>默认 15 秒（采样 1 秒的 15 倍）—— 给网络抖动和短暂重连留余量。
+     */
+    private final long staleAfterSeconds;
+
+    public TelemetryController(TdengineClient td,
+                               @Value("${iiot.stale.after-seconds:15}") long staleAfterSeconds) {
         this.td = td;
+        this.staleAfterSeconds = staleAfterSeconds;
     }
 
     /** 顶部指标：总点数、设备数、子表数、质量分布、最新时间。 */
@@ -69,6 +84,18 @@ public class TelemetryController {
         Long good = quality.getOrDefault("GOOD", 0L);
         result.put("goodRate", total == null || total == 0 ? null
                 : Math.round(10000.0 * good / total) / 100.0);
+
+        // ★ 有多少台设备的"最新数据"已经过期（采集端停了 / 网断了）
+        int staleDevices = 0;
+        for (Map<String, Object> row : td.query(
+                "select device, last(ts) as ts from " + td.database() + ".telemetry partition by device")) {
+            Long age = ageSeconds(row.get("ts"));
+            if (age != null && age > staleAfterSeconds) {
+                staleDevices++;
+            }
+        }
+        result.put("staleDevices", staleDevices);
+        result.put("staleAfterSeconds", staleAfterSeconds);
         return result;
     }
 
@@ -100,9 +127,35 @@ public class TelemetryController {
             p.put("val", row.get("val"));
             p.put("ts", row.get("ts"));
             p.put("quality", row.get("quality"));
+            // ★ 新鲜度：库里的 quality 是"写进去那一刻"的质量码，
+            //   它不会因为采集端停了而变 STALE —— 所以要在查询时重新算"多久没更新了"。
+            Long age = ageSeconds(row.get("ts"));
+            p.put("ageSeconds", age);
+            boolean stale = age != null && age > staleAfterSeconds;
+            p.put("stale", stale);
             points.put(point, p);
+            if (stale) {
+                deviceNode.put("stale", Boolean.TRUE);
+            }
+        }
+        // 每个设备默认 stale=false
+        for (Map<String, Object> node : byDevice.values()) {
+            node.putIfAbsent("stale", Boolean.FALSE);
         }
         return new ArrayList<>(byDevice.values());
+    }
+
+    /** 把 TDengine 返回的 UTC ISO 时间戳换算成"距今多少秒"。解析不了返回 {@code null}。 */
+    private static Long ageSeconds(Object ts) {
+        if (ts == null) {
+            return null;
+        }
+        try {
+            java.time.Instant instant = java.time.Instant.parse(String.valueOf(ts));
+            return Math.max(0, java.time.Duration.between(instant, java.time.Instant.now()).getSeconds());
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** 某个设备某个点位的时序（最近 N 分钟）。 */
