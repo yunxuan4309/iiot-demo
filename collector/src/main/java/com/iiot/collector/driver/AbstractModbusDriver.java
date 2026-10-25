@@ -123,11 +123,17 @@ public abstract class AbstractModbusDriver implements DeviceDriver {
 
     private PointValue decodeRegisterPoint(DeviceEndpoint endpoint, PointDef point, Instant ts,
                                            int[] values, int index) {
-        double value = switch (point.type()) {
+        // 1) 先按"寄存器里的原始位模式"解出 raw
+        //    INT16 必须按补码还原成负数 —— 负温度（-5.3℃）存的是 -53，直接当无符号会读成 65483
+        double raw = switch (point.type()) {
             case BOOL -> values[index] != 0 ? 1 : 0;
+            case INT16 -> (short) values[index];
+            case UINT16 -> values[index] & 0xFFFF;
             case FLOAT32 -> point.wordOrder().floatOf(values[index], values[index + 1]);
             case UINT32 -> point.wordOrder().uint32Of(values[index], values[index + 1]);
         };
+        // 2) 再按点表的 scale 换算成工程值（大多数真实仪表的 253 = 25.3℃ 就走这一步）
+        double value = point.type().isBoolean() || point.scale() == 1.0 ? raw : raw * point.scale();
         // 字序错了会解出 NaN / Infinity —— 值本身不合法，直接判 BAD
         Quality quality = point.type().isBoolean() || Double.isFinite(value) ? Quality.GOOD : Quality.BAD;
         return new PointValue(endpoint.deviceId(), point.id(), ts, value, quality, point.unit());

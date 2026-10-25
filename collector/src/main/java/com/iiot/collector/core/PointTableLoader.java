@@ -178,7 +178,11 @@ public final class PointTableLoader {
         Double min = optionalDouble(props, base + "min");
         Double max = optionalDouble(props, base + "max");
 
-        PointDef point = new PointDef(pointId, area, offset, type, order, unit, min, max);
+        // 缩放：可选，默认 1.0。真实仪表多数是"整数 + 缩放"（int16=253 且 scale=0.1 → 25.3）
+        Double scaleValue = optionalDouble(props, base + "scale");
+        double scale = scaleValue == null ? 1.0 : scaleValue;
+
+        PointDef point = new PointDef(pointId, area, offset, type, order, unit, min, max, scale);
         String problem = point.validate();
         if (problem != null) {
             throw new IOException("设备 " + deviceId + " 的点位配置不合法: " + problem);
@@ -212,9 +216,12 @@ public final class PointTableLoader {
     private static PointDef.Type parseType(String text, String pointId) throws IOException {
         return switch (text.trim().toLowerCase()) {
             case "bool" -> PointDef.Type.BOOL;
+            case "int16", "int", "short" -> PointDef.Type.INT16;
+            case "uint16", "ushort", "word" -> PointDef.Type.UINT16;
             case "float32", "float" -> PointDef.Type.FLOAT32;
             case "uint32", "uint" -> PointDef.Type.UINT32;
-            default -> throw new IOException(pointId + ": 未知类型 " + text + "（bool/float32/uint32）");
+            default -> throw new IOException(pointId + ": 未知类型 " + text
+                    + "（bool/int16/uint16/float32/uint32）");
         };
     }
 

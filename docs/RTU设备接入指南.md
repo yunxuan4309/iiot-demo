@@ -133,6 +133,68 @@ device.rtu-01.point.humidity.max=100
 
 ---
 
+## 五·5、⭐ 真实仪表的常见形态：**「16 位整数 + 缩放」**
+
+> **2026-10-25 补**：真传感器到货时才发现，点表原来**只支持 bool / float32 / uint32**，
+> 而**真实国产仪表的绝大多数是"16 位整数 + 线性缩放"** —— 这类设备**一个都读不了**。
+> 已补齐，这一节记录为什么必须有它。
+
+### 现象：手册写"分辨率 0.1℃"，寄存器里却是 253
+
+厂商界面显示 `温度 29.8℃`，但寄存器里存的是 **`298`**：
+
+```
+253  → 253 × 0.1 = 25.3 ℃
+501  → 501 × 0.1 = 50.1 %RH
+```
+
+**为什么厂家不直接存浮点**：16 位整数省一半寄存器、省一半报文，而且**没有精度歧义**
+（浮点存 25.3 可能变成 25.299999）。工业仪表几十年都这么干。
+
+### 点表怎么写
+
+```properties
+# 温度：1 个寄存器，int16（必须是有符号 —— 否则 -5.3℃ 会读成 65483）
+device.sensor-01.point.temperature.area=holding
+device.sensor-01.point.temperature.offset=0
+device.sensor-01.point.temperature.type=int16
+device.sensor-01.point.temperature.scale=0.1
+device.sensor-01.point.temperature.unit=°C
+
+# 湿度：uint16（不会为负的量用无符号）
+device.sensor-01.point.humidity.offset=1
+device.sensor-01.point.humidity.type=uint16
+device.sensor-01.point.humidity.scale=0.1
+```
+
+### ⭐ 三个必须记住的点
+
+| # | 坑 | 说明 |
+|---|---|---|
+| 1 | **温度必须 `int16` 不能 `uint16`** | `-5.3℃` 存的是 `-53`，按无符号解释是 **65483** → ×0.1 = **6548.3℃**；量程校验会判 BAD，但**容易误以为是字序问题** |
+| 2 | **16 位类型不需要 `order`** | 字序只对**跨两个寄存器**的 32 位类型有意义。给 int16 配 order 是"用 32 位思维误伤 16 位"（原来的 `validate()` 就误伤，已修） |
+| 3 | **`scale` 是设备属性，不是代码逻辑** | 这台 ×0.1、那台可能 ×0.01。**写进点表**，换设备只改配置 |
+
+### 已用虚拟串口做过回归（2026-10-25，不依赖真硬件）
+
+在 `RtuSlaveMain` 里放了固定值，四个点覆盖全部四条解码路径：
+
+```
+reg[3] = 0xFFCB  → int16 = -53  → scale 0.1 → -5.30°C    ✅ 补码/负温度
+reg[4] = 0x01F5  → uint16 = 501 → scale 0.1 → 50.10%RH   ✅ 无符号+缩放
+reg[2] = counter → uint16 6→10  → scale 省略 = 1.0       ✅ 默认值
+reg[0..1]        → float32 25.60                         ✅ 老路径没坏
+```
+
+```powershell
+collector\run-rtu-slave.cmd --com COM5 --seconds 120
+collector\run-collect.cmd --points collector\src\main\resources\points-rtu-int16-test.properties --cycles 5
+```
+
+> **⇒ 真设备通电前，解码链路已经验证过了**；到货只剩"改 `comPort` + 确认寄存器地址"。
+
+---
+
 ## 六、RTU 特有的 5 个坑
 
 | # | 坑 | 现象 | 解决 |

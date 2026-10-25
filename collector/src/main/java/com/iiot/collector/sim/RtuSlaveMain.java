@@ -57,8 +57,13 @@ public final class RtuSlaveMain {
         image.addRegister(highWord);          // holding 0
         image.addRegister(lowWord);           // holding 1
         image.addRegister(counter);           // holding 2 —— 每秒 +1，证明从站活着
-        for (int i = 0; i < 5; i++) {
-            image.addRegister(new SimpleRegister(0));   // holding 3..7，让 probe 一读就是 8 个
+        // 下面两个寄存器专门验证「16 位整数 + 缩放」（真实国产仪表的主流形态）：
+        //   holding 3 = 0xFFCB → int16 是 -53 → scale 0.1 → -5.3℃    （验证补码/负温度）
+        //   holding 4 = 501       → uint16 是 501 → scale 0.1 → 50.1%RH（验证无符号+缩放）
+        image.addRegister(new SimpleRegister(0xFFCB));
+        image.addRegister(new SimpleRegister(501));
+        for (int i = 0; i < 3; i++) {
+            image.addRegister(new SimpleRegister(0));   // holding 5..7，让 probe 一读就是 8 个
         }
 
         ModbusSlave slave = ModbusSlaveFactory.createSerialSlave(params);

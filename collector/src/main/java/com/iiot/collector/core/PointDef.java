@@ -21,13 +21,21 @@ import com.iiot.collector.proto.WordOrder;
  * @param unit      工程单位（仅用于展示，可空）
  * @param min       物理下限（可空 = 不校验）
  * @param max       物理上限（可空 = 不校验）
+ * @param scale     线性缩放系数（默认 1.0）。<b>寄存器里的整数值 × scale = 工程值</b>
+ *                  —— 例如温度 `253`，`scale=0.1` → 25.3℃
  */
 public record PointDef(String id, Area area, int offset, Type type, WordOrder wordOrder, String unit,
-                       Double min, Double max) {
+                       Double min, Double max, double scale) {
 
-    /** 兼容旧调用的构造器（不配量程）。 */
+    /** 兼容旧调用的构造器（不配量程、不配缩放）。 */
     public PointDef(String id, Area area, int offset, Type type, WordOrder wordOrder, String unit) {
-        this(id, area, offset, type, wordOrder, unit, null, null);
+        this(id, area, offset, type, wordOrder, unit, null, null, 1.0);
+    }
+
+    /** 兼容旧调用的构造器（只配量程，不配缩放）。 */
+    public PointDef(String id, Area area, int offset, Type type, WordOrder wordOrder, String unit,
+                    Double min, Double max) {
+        this(id, area, offset, type, wordOrder, unit, min, max, 1.0);
     }
 
     /** Modbus 四个数据区。 */
@@ -42,9 +50,21 @@ public record PointDef(String id, Area area, int offset, Type type, WordOrder wo
         INPUT_REGISTER
     }
 
-    /** 本 demo 用到的数据类型。 */
+    /**
+     * 支持的数据类型。
+     *
+     * <p><b>为什么必须有 INT16 / UINT16</b>：真实国产仪表的绝大多数是
+     * <b>「16 位整数 + 线性缩放」</b> —— 温度 `253` 表示 25.3℃（×0.1）、压力 `1234` 表示 12.34kPa（×0.01）。
+     * 只有 Float32 / UInt32 的话，这类设备<b>一个都读不了</b>。
+     *
+     * <p>缩放系数放点表的 {@code scale}，因为"这台设备是 ×10 还是 ×100"是<b>设备属性</b>，不是代码逻辑。
+     */
     public enum Type {
         BOOL(1),
+        /** 16 位<b>有符号</b>整数（-32768~32767）—— 负温度、负压用它。 */
+        INT16(1),
+        /** 16 位<b>无符号</b>整数（0~65535）—— 湿度、计数这类不会负的量。 */
+        UINT16(1),
         FLOAT32(2),
         UINT32(2);
 
@@ -65,6 +85,14 @@ public record PointDef(String id, Area area, int offset, Type type, WordOrder wo
 
     public int registerCount() {
         return type.registerCount();
+    }
+
+    /**
+     * 是否需要配字序：只有<b>跨两个寄存器</b>的 32 位类型才有"高字在前还是低字在前"的问题。
+     * <b>16 位类型天生没有字序</b> —— 要求它配 order 是用 32 位的思维误伤 16 位。
+     */
+    public boolean needsWordOrder() {
+        return type.registerCount() >= 2;
     }
 
     public boolean isWritable() {
@@ -109,7 +137,7 @@ public record PointDef(String id, Area area, int offset, Type type, WordOrder wo
         if (offset < 0) {
             return id + ": offset 不能为负（协议是 0 基，40001 对应 offset 0）";
         }
-        if (!type.isBoolean() && wordOrder == null) {
+        if (needsWordOrder() && wordOrder == null) {
             return id + ": " + type + " 必须配置 order（ABCD/CDAB/BADC/DCBA），否则解出来是天文数字";
         }
         if (min != null && max != null && min > max) {
