@@ -259,6 +259,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 
 | 文档 | 内容 |
 |---|---|
+| ⭐⭐ [docs/面试问答-红宇精工-工业软件工程师.md](docs/面试问答-红宇精工-工业软件工程师.md) | **红宇精工公司功课**（兵装集团/40亿/3000人/七个基地/液力变矩器+AT油泵）+ **20 道问答**（含"真实生产"6 题：CNC 采集/MDC/军工涉密边界/品牌混杂/产线停机排查） |
 | ⭐ [docs/工业通信协议与工厂系统-面试速查.md](docs/工业通信协议与工厂系统-面试速查.md) | **Profinet / EtherNet-IP / OPC UA / Modbus 的定位与实时性分层**；SCADA/MES/EAM 一句话定位；**10 个高频面试题答法** |
 | ⭐ [docs/项目设计与踩坑总览.md](docs/项目设计与踩坑总览.md) | **一页看懂**：三层架构 · 8 个设计决策（含被否决的备选）· **20 个坑分类** · 实测数据 · 面试三个版本 · PLC 软件选型 |`r`n| [docs/pitfalls.md](docs/pitfalls.md) | 十个坑（坑 0~9）的实测过程与结论 |
 | [docs/TDengine-部署与踩坑.md](docs/TDengine-部署与踩坑.md) | Windows 无服务端包 → WSL2 免 root 部署；IPv6/UTC/保留字 三个数据层坑 |
