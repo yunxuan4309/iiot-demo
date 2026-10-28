@@ -259,7 +259,7 @@ project.json          OpenPLC 工程配置（tasks + instances）
 
 | 文档 | 内容 |
 |---|---|
-| [docs/pitfalls.md](docs/pitfalls.md) | 十个坑（坑 0~9）的实测过程与结论 |
+| ⭐ [docs/项目设计与踩坑总览.md](docs/项目设计与踩坑总览.md) | **一页看懂**：三层架构 · 8 个设计决策（含被否决的备选）· **20 个坑分类** · 实测数据 · 面试三个版本 · PLC 软件选型 |`r`n| [docs/pitfalls.md](docs/pitfalls.md) | 十个坑（坑 0~9）的实测过程与结论 |
 | [docs/TDengine-部署与踩坑.md](docs/TDengine-部署与踩坑.md) | Windows 无服务端包 → WSL2 免 root 部署；IPv6/UTC/保留字 三个数据层坑 |
 | [docs/新鲜度检查.md](docs/新鲜度检查.md) | ⭐ **采集端停了库里仍是 GOOD** —— 为什么过期判断必须在查询层、与质量码的区别、实测抓到 3 小时未更新 |
 | [docs/MQTT-北向分发.md](docs/MQTT-北向分发.md) | 北向为什么是 MQTT 而不是 HTTP；topic/QoS/retain 的选择；4 个坑 |
