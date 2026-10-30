@@ -41,3 +41,6 @@ codesys/*.compileinfo
 codesys/*.precompilecache
 codesys/*.opt
 codesys/*.~u
+
+# ---- CODESYS 编译时生成的设备应用描述（每次编译都会变，不进库）----
+codesys/*.Device.Application.xml
