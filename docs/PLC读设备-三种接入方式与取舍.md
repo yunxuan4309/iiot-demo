@@ -72,22 +72,50 @@
 - 手上的 **CODESYS 是软 PLC**，没有现场总线口（485 要另配，且 COM7 被 Java 占着）；
 - 这样能把"采集"和"判断"**分开演示**，讲起来清楚。
 
-**代价（要主动承认）**：采集方向与真实产线相反 —— 真实产线是 PLC 读设备，我们暂时是 Java 读设备。
+**代价（要主动承认）**：采集方向与真实产线相反 —— 真实产线是 PLC 读设备，我们暂时是 Java 读设备。（**2026-10-30 已改造为 PLC 直读，见 §六**）
 
 ---
 
-## 六、改造方向（已列入待办）
+## 六、改造已完成（2026-10-30 实测）
 
-在 CODESYS 设备树里加 `Modbus Master, COM Port`，让 **PLC 直接当 Modbus RTU 主站读 COM7 的传感器**；Java 退化成"只从 PLC 读结果"。
-
-改造后的形态（标准形态）：
+**做法**：CODESYS 里加串口主站，**PLC 自己当 Modbus RTU 主站**去读传感器。
 
 ```
-传感器 ──RS-485──> [CODESYS PLC：Modbus RTU 主站] ──> 判断 → xAlarm
-                                    └──Modbus TCP 从站(1503)──> Java 采集 ──> 平台
+设备树：
+Device
+├── PLC逻辑 / Application / PLC_PRG
+├── Ethernet ── ModbusTCP_Server_Device        ← 保留：Java 仍从这里读结果
+└── Modbus_COM (COM5 · 9600 · 8-N-1)           ← 串口
+    └── Modbus_Client_COM_Port (RTU · 超时 1000ms · 勾「自动重启通信」)
+        └── Modbus_Server_COM_Port (从站地址 1)  ← 描述"远端那台传感器"
+            └── Channel 0：FC03 · 起始 0 · 长度 2 · 周期 100ms
 ```
 
-判据：停机 Java 采集后，**PLC 里 rTemp 仍在变**（说明是 PLC 在读，不是 Java 在喂）。
+**PLC_PRG**：
+
+```iecst
+wHumidityRaw AT %IW10 : WORD;   // holding[0] 湿度（uint16 ×0.1）
+wTempRaw     AT %IW11 : WORD;   // holding[1] 温度（int16 ×0.1，支持负温）
+rHumidity := WORD_TO_REAL(wHumidityRaw) / 10.0;
+rTemp     := INT_TO_REAL(WORD_TO_INT(wTempRaw)) / 10.0;
+xAlarm    := rTemp > 32.0;      // 判断仍在 PLC
+```
+
+**实测证据**（无硬件，用 com0com 的 `COM5 ↔ COM6` + `RtuSlaveMain --layout sensor`）：
+
+| 变量 | 值 | 证明什么 |
+|---|---|---|
+| `wTempIn`（Java 写进 %IW0 的那个） | **0** | **Java 没参与** |
+| `wHumidityRaw` / `wTempRaw` | **612 / 356** | PLC 从串口读到的原始寄存器 |
+| `rTemp` / `rHumidity` | **35.6 / 61.2** | PLC 自己算 |
+| `xAlarm` | **TRUE** | PLC 自己判断越限 |
+
+截图：`D:\PLC学习\截图-面试用\PLC直读-35.6C-xAlarm-TRUE.png`
+
+**这次学到的两个工程点**：
+
+1. **通信失败必须自愈**：中途重启对端 → 主站超时 → 没勾「自动重启通信」就停在错误态，值被通道的「错误处理 = 保持最后值」**冻结**：界面上看起来还有数，实际已经不刷新了。这正是"数据新鲜度"必须靠时间戳/心跳判断、不能只看"有值"的原因。
+2. **串口是独占资源**：CODESYS 在线时占着 COM5，Java 再打开同一个口直接失败。所以"PLC 读"和"上位机读"在物理层就是二选一 —— 现场才需要网关或多串口卡。
 
 ---
 
@@ -97,7 +125,7 @@
 > 「GX Simulator2 是 CPU 仿真器，X/Y/D 都只是内存里的位和字，**没有物理通信口，也不跑 Modbus 协议栈**，所以外部软件读不到它。它适合验证梯形图逻辑，不适合验证数据链路。要采数据得用带口的真 PLC，或者像我现在这样用 CODESYS 的真实运行时。」
 
 **Q2：那你的 PLC 怎么拿到温度的？是不是假 PLC？**
-> 「是真运行时，但**采集这一环我让 Java 代劳了**：传感器只有 485，软 PLC 没有现场总线口，所以 Java 读传感器后把值写进 PLC 的保持寄存器，**判断仍然在 PLC 里做**（`xAlarm := rTemp > 32`）。我知道真实产线是 PLC 读设备，这一步我已经列入改造 —— 让 CODESYS 当 Modbus RTU 主站直读串口，Java 退到只读 PLC。」
+> 「早期是 **Java 代采**：传感器只有 485、软 PLC 没有现场总线口，所以 Java 读后写进 PLC 的保持寄存器。**后来我按真实产线改掉了**：在 CODESYS 里加串口 Modbus 主站，**PLC 自己读传感器**（`%IW10/%IW11`），Java 退到"只读 PLC"。改造后实测：`wTempIn=0`（Java 没参与）、`wTempRaw=356`、`rTemp=35.6`、`xAlarm=TRUE`。」
 
 **Q3：软 PLC 和真 PLC 差在哪？**
 > 「软件运行时能跑真正的任务调度和通信栈，但它跑在 Windows 上：没有硬实时、没有电气隔离、没有看门狗和断电保持，也依赖 PC 不蓝屏。所以它能证明**协议和逻辑**，证明不了**产线级可靠性**。」
