@@ -113,6 +113,39 @@ $ py -3 tools\opcua_probe.py
 
 ---
 
+## 六点五、"服务端里到底有什么"——怎么"看"
+
+一条命令就能把地址空间 Browse 成树（`tools/opcua_probe.py`）：
+
+```
+$ py -3 tools\opcua_probe.py
+
+== 地址空间（Browse 出来的树）==
+└── DeviceSet
+    └── CODESYS Control Win V3 x64
+        └── Resources
+            └── Application
+                ├── Programs
+                │   └── PLC_PRG
+                │       ├── rHumidity     Float    = 75.8
+                │       ├── rTemp         Float    = 22.5    ← 真传感器温度
+                │       ├── wHumidityRaw  UInt16   = 758     ← 原始寄存器
+                │       ├── wTempRaw      UInt16   = 225     ← 原始寄存器
+                │       └── xAlarm        Boolean  = False   ← PLC 判断结果
+                └── Tasks
+```
+
+**这棵树证明了三件事：**
+
+1. 层级 = 设备 → 资源 → 应用 → 程序 → 变量；
+2. **只有勾进「符号配置」的变量才会出现**（没勾的不暴露，这本身就是最朴素的安全边界）；
+3. 每个变量自带**名字 + 类型 + 当前值** —— 客户端不需要点表，这是 Modbus 做不到的。
+
+> 想用 GUI 看，可以装 **UaExpert**：Add Server → `opc.tcp://127.0.0.1:4840` → Anonymous → 展开 `Objects`。
+> 录屏用**终端树**更好看：画面干净、一眼看到"浏览"这个动作本身。
+
+---
+
 ## 七、相关文件
 
 | 文件 | 作用 |
