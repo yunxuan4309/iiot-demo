@@ -57,8 +57,9 @@ CODESYS Control Win V3 x64 是**装在 Windows 上的真实运行时**：有真�
 
 【深挖】
 - **真实工业逻辑**：现场设备（传感器/仪表/变频器）先接 PLC，**PLC 做采集与判断**（超限就断输出、做联锁），上位机再去读 PLC 的结果。**保护不能依赖服务器** —— 服务器会挂、网会断、JVM 会 GC 停顿。
-- **改造后的设备树**（2026-10-30 实测）：`Device → Ethernet(ModbusTCP_Server_Device)` 保留给 Java 读；新增 `Modbus_COM (COM5 · 9600 · 8-N-1) → Modbus_Client_COM_Port (RTU · 超时 1000ms) → Modbus_Server_COM_Port (从站 1) → Channel 0 (FC03 · 起始 0 · 长度 2 · 周期 100ms)`。
-- **`COM5` 要说清**：真传感器在 **COM7**，但 PLC 直读那一轮手上没有真表，用的是 **com0com 虚拟串口对（COM5 ↔ COM6）** + `RtuSlaveMain --layout sensor` 顶替。真表接回来时，**COM7 同一时刻只能被一个程序打开** —— PLC 占了，Java 就读不了，反之亦然。
+- **改造后的设备树**：`Device → Ethernet(ModbusTCP_Server_Device)` 保留给 Java 读；新增 `Modbus_COM (9600 · 8-N-1) → Modbus_Client_COM_Port (RTU · 超时 1000ms) → Modbus_Server_COM_Port (从站 1) → Channel 0 (FC03 · 起始 0 · 长度 2 · 周期 100ms)`。
+- **演进顺序要讲清（重要，别把自己的进度说小了）**：① **2026-10-30** 真表还没接上，先用 **com0com 虚拟串口对（COM5 ↔ COM6）** + 自写 `RtuSlaveMain --layout sensor` 顶替，把参数、寄存器映射、判断逻辑全部跑通；② **2026-10-31 真表接回**，把 `Modbus_COM` 的串口号从 5 改成 **7**，PLC 直接读到真值：**`rTemp ≈ 22.5`（室温）→ 吹热风 → `rTemp ≈ 35.6`、`xAlarm` 翻 TRUE**，并录成演示视频。**"先虚拟后真表"是加分项：说明你会在没有硬件时把链路打通。**
+- **串口独占（真实工业约束）**：COM7 同一时刻只能被一个程序打开 —— PLC 占了，Java 就读不了，反之亦然。所以「PLC 读」与「上位机直读」在物理层**二选一**，现场才需要网关或多串口卡。
 - **早期形态（要能讲清代价）**：`BridgeMain` 让 Java 读传感器 → 再 Modbus TCP 写进 PLC 的保持寄存器 `%IW0` → PLC 里 `rTemp := %IW0/10`。这能让「采集」和「判断」分开演示，但**采集方向与真实产线相反**。
 - **两个工程教训**：① **通信失败必须自愈** —— 中途重启对端后主站超时，不勾「自动重启通信」就停在错误态，通道「错误处理=保持最后值」会让界面**看起来还有数、实际已不刷新**；② **串口是独占资源** —— PLC 在线占着 COM，Java 再开同一个口直接失败，所以「PLC 读」和「上位机直读」物理上二选一。
 - 面试话术："一开始我是 Java 代采再写进 PLC，因为软 PLC 没有现场总线口、COM7 又被 Java 占着。后来我把它改成了 **PLC 自己当 RTU 主站** —— 采集和判断都回到 PLC，Java 退回只读。**这个改动就是为了让形态和真实产线一致。**"
