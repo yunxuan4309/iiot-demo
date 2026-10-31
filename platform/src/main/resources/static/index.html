@@ -135,14 +135,27 @@
 </section>
 
 <footer>
-  窗口 = 最近 <code id="winMin">10</code> 分钟 · 每 3 秒刷新 ·
+  窗口 =
+  <select id="winSel" style="background:#16202b;color:#cfe3ff;border:1px solid #2a3644;border-radius:4px;padding:2px 6px">
+    <option value="1">1 分钟</option>
+    <option value="3">3 分钟</option>
+    <option value="5">5 分钟</option>
+    <option value="10" selected>10 分钟</option>
+    <option value="30">30 分钟</option>
+  </select>
+  · 每 3 秒刷新 ·
+  <button id="sinceBtn" style="background:#16202b;color:#cfe3ff;border:1px solid #2a3644;border-radius:4px;padding:2px 8px;cursor:pointer">从现在起</button>
+  <button id="sinceClear" style="background:#16202b;color:#7b8a99;border:1px solid #2a3644;border-radius:4px;padding:2px 8px;cursor:pointer">恢复整窗</button>
+  <span id="sinceHint" style="color:#7b8a99"></span>
   数据来自 TDengine（UTC 存储，页面按浏览器本地时区显示）
 </footer>
 
 <script>
 const API = '';
 const REFRESH_MS = 3000;
-const WINDOW_MIN = 10;
+let WINDOW_MIN = 10;
+// 「从现在起」：非 null 时只显示该时刻之后的数据（后端只按 minutes 查，过滤放在前端）
+let sinceTs = null;
 
 let selectedDevice = null;
 let lineChart = null;
@@ -237,12 +250,15 @@ async function refreshLatest() {
     // 数据过期优先于"报警/运行/停机"—— 一个不动的旧值比一个报警更危险
     const stale = r.stale === true || t.stale === true;
     const age = t.ageSeconds == null ? '' : ` ${t.ageSeconds}s`;
+    // 状态列语义 = "这条数据现在能不能信"，而不是电机转不转：
+    //   过期 > 报警 > 无数据 > 正常。电机状态挪到行的悬停提示里。
     const state = stale ? `<span style="color:var(--stale)">⚠ 数据过期${age}</span>`
                 : alarmOn ? '<span style="color:#ff5252">报警</span>'
-                : motorOn === null ? '<span style="color:#7b8a99">—</span>'
-                : motorOn ? '<span style="color:#3ddc84">运行</span>' : '<span style="color:#7b8a99">停机</span>';
+                : t.val == null ? '<span style="color:#7b8a99">无数据</span>'
+                : '<span style="color:#3ddc84">正常</span>';
+    const motorHint = motorOn === null ? '' : (motorOn ? '电机：运行' : '电机：停机');
     const q = t.quality || '–';
-    return `<tr data-device="${r.device}" class="${r.device === selectedDevice ? 'active' : ''}">
+    return `<tr data-device="${r.device}" title="${motorHint}" class="${r.device === selectedDevice ? 'active' : ''}">
       <td>${r.device}</td>
       <td${stale ? ' style="color:var(--dim)"' : ''}>${t.val == null ? '–' : Number(t.val).toFixed(2)} ℃</td>
       <td>${state}</td>
@@ -263,11 +279,20 @@ async function refreshLatest() {
 async function refreshSeries() {
   if (!selectedDevice) return;
   const s = await getJson(`/api/series?device=${encodeURIComponent(selectedDevice)}&point=temperature&minutes=${WINDOW_MIN}`);
-  $('lineTitle').textContent = `${selectedDevice} · 温度时序（最近 ${s.minutes} 分钟，${s.count} 点）`;
+  // 「从现在起」：只保留点击时刻之后的数据（后端只按 minutes 查，过滤放在前端）
+  const pts = sinceTs == null ? s.points : s.points.filter(p => new Date(p[0]).getTime() >= sinceTs);
+  const sinceLabel = sinceTs == null ? `最近 ${s.minutes} 分钟` : `自 ${localTime(sinceTs)} 起`;
+  $('lineTitle').textContent = `${selectedDevice} · 温度时序（${sinceLabel}，${pts.length} 点）`;
+  if ($('sinceHint')) $('sinceHint').textContent = sinceTs == null ? '' : '（只看「从现在起」之后的数据）';
 
-  const times = s.points.map(p => localTime(p[0]));
-  const values = s.points.map(p => p[1] == null ? null : Number(p[1]));
-  const qualities = s.points.map(p => p[2]);
+  const times = pts.map(p => localTime(p[0]));
+  const values = pts.map(p => p[1] == null ? null : Number(p[1]));
+  const qualities = pts.map(p => p[2]);
+  // 阈值线只在 32℃ 落在数据范围内时画（见下方 markLine 的注释）
+  const nums = values.filter(v => v != null);
+  const vMin = nums.length ? Math.min(...nums) : 0;
+  const vMax = nums.length ? Math.max(...nums) : 0;
+  const showThreshold = nums.length > 0 && vMin <= 32 && vMax >= 32;
 
   lineChart.setOption({
     grid: { left: 56, right: 24, top: 24, bottom: 40 },
@@ -297,13 +322,15 @@ async function refreshSeries() {
         { offset: 0, color: 'rgba(74,158,255,.35)' },
         { offset: 1, color: 'rgba(74,158,255,0)' }
       ])},
-      // 用 markLine 标出报警阈值：一眼看出"有没有越线"
-      markLine: {
+      // 报警阈值 32℃（与 PLC 的 xAlarm := rTemp > 32.0 一致）。
+      // 规则：只有 32 落在当前数据范围内才画线 —— 否则 Y 轴会被拉到 32 以上，
+      // 23℃ 的曲线（或 63℃ 的仿真设备）会被压成一条平线。
+      markLine: showThreshold ? {
         silent: true, symbol: 'none',
-        label: { formatter: '报警阈值 80℃', color: '#ff5252', position: 'insideEndTop' },
+        label: { formatter: '报警阈值 32℃', color: '#ff5252', position: 'insideEndTop' },
         lineStyle: { color: '#ff5252', type: 'dashed', width: 1 },
-        data: [{ yAxis: 80 }]
-      }
+        data: [{ yAxis: 32 }]
+      } : undefined
     }]
   }, true);
 }
@@ -326,7 +353,11 @@ window.addEventListener('DOMContentLoaded', () => {
   lineChart = echarts.init($('line'), null, { renderer: 'canvas' });
   pieChart = echarts.init($('pie'), null, { renderer: 'canvas' });
   window.addEventListener('resize', () => { lineChart.resize(); pieChart.resize(); });
-  $('winMin').textContent = WINDOW_MIN;
+  // 时段控件：窗口长度 + 「从现在起」/「恢复整窗」
+  $('winSel').value = String(WINDOW_MIN);
+  $('winSel').onchange = e => { WINDOW_MIN = Number(e.target.value); refreshSeries(); };
+  $('sinceBtn').onclick = () => { sinceTs = Date.now(); refreshSeries(); };
+  $('sinceClear').onclick = () => { sinceTs = null; refreshSeries(); };
   tick();
   setInterval(tick, REFRESH_MS);
 });
