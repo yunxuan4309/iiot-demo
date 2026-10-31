@@ -232,12 +232,14 @@ async function refreshLatest() {
     const a = r.points.alarm || {};
     const m = r.points.motor_running || {};
     const alarmOn = Number(a.val) > 0;
-    const motorOn = Number(m.val) > 0;
+    // 有些设备没有 motor_running 点（例如经 PLC 采的真传感器那台），此时状态显示「—」而不是「停机」
+    const motorOn = m.val == null ? null : Number(m.val) > 0;
     // 数据过期优先于"报警/运行/停机"—— 一个不动的旧值比一个报警更危险
     const stale = r.stale === true || t.stale === true;
     const age = t.ageSeconds == null ? '' : ` ${t.ageSeconds}s`;
     const state = stale ? `<span style="color:var(--stale)">⚠ 数据过期${age}</span>`
                 : alarmOn ? '<span style="color:#ff5252">报警</span>'
+                : motorOn === null ? '<span style="color:#7b8a99">—</span>'
                 : motorOn ? '<span style="color:#3ddc84">运行</span>' : '<span style="color:#7b8a99">停机</span>';
     const q = t.quality || '–';
     return `<tr data-device="${r.device}" class="${r.device === selectedDevice ? 'active' : ''}">
