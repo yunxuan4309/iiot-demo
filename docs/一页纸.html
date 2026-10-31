@@ -182,8 +182,8 @@
 <div class="head">
   <div class="eyebrow">Industrial Data Acquisition · Project Overview</div>
   <h1>工业设备数据采集与在线监测</h1>
-  <div class="sub">南向 Modbus（TCP / RTU）→ 统一数据模型（含质量码）→ 时序库 → Web 监测页 · 全链路自建、一条命令可复现</div>
-  <div class="badge">Java 21 · TDengine 3.3 · Spring Boot</div>
+  <div class="sub">真传感器 → PLC（Modbus RTU 主站，LD/ST/FBD）→ 采集（含质量码）→ TDengine → Web；北向 MQTT / OPC UA · 全链路自建、一条命令可复现</div>
+  <div class="badge">Java 21 · CODESYS PLC · TDengine · OPC UA</div>
 </div>
 
 <!-- ══════════ 三个约束 ══════════ -->
@@ -210,10 +210,10 @@
 <h2>架构 <span class="en">architecture</span></h2>
 <div class="flow">
   <div class="layer">
-    <div class="t">设备层</div>
-    <div class="d">仿真从站 × N<br>真传感器 × 1<br>TCP 1502 / RTU RS485</div>
+    <div class="t">现场 / PLC</div>
+    <div class="d">真传感器 → PLC（RTU 主站）<br>LD · ST · FBD 三语言<br>仿真从站 × 10（TCP 1502）</div>
   </div>
-  <div class="arrow"><div class="glyph">→</div><div class="lbl">Modbus</div></div>
+  <div class="arrow"><div class="glyph">→</div><div class="lbl">TCP 1503<br>OPC UA 4840</div></div>
   <div class="layer">
     <div class="t">collector</div>
     <div class="d">DeviceDriver 抽象<br>质量码 GOOD/STALE/BAD<br>每设备一条虚拟线程<br>失败退避 1×2×4×8</div>
@@ -230,7 +230,7 @@
   </div>
 </div>
 
-<div style="font-size:6.9pt;color:var(--muted);margin-top:3px;"><b style="color:var(--good)">北向</b> 采集端同时发布 MQTT <code>iiot/{device}/{point}</code>（QoS 1 · retain=true）给 MES / SCADA / 大屏订阅；页面走 HTTP（只读 TDengine），两条路互不影响。</div>
+<div style="font-size:6.9pt;color:var(--muted);margin-top:3px;"><b style="color:var(--good)">北向</b> 采集端同时发布 MQTT <code>iiot/{device}/{point}</code>（QoS 1 · retain=true）给 MES / SCADA / 大屏订阅；页面走 HTTP（只读 TDengine）。<b style="color:var(--good)">PLC 同时开 OPC UA（4840）</b>：客户端不用点表，Browse 就能发现 <code>rTemp</code>/<code>xAlarm</code>（演示用匿名，生产须证书）。</div>
 
 <!-- ══════════ 实测指标 ══════════ -->
 <h2>实测指标 <span class="en">100 devices × 4 points × 1 Hz × 60 s</span></h2>
@@ -312,20 +312,24 @@
   <span class="chip">REST 而非 JDBC <i>· 免 native 库，可跨隧道</i></span>
   <span class="chip">Spring Boot 3.2 <i>· 只读平台</i></span>
   <span class="chip">ECharts 本地副本 <i>· 离线可跑</i></span>
+  <span class="chip">实采真传感器 <i>· RS485 / FC03 / ×0.1</i></span>
+  <span class="chip">CODESYS 软 PLC <i>· RTU 主站 + TCP 从站 + OPC UA</i></span>
+  <span class="chip">Wireshark <i>· FC03 逐字节，一帧两种字序</i></span>
 </div>
 
 <!-- ══════════ 边界 ══════════ -->
 <h2>边界 <span class="en">honest limits</span></h2>
 <div class="limit">
   <b>不是生产系统</b>（单机 · 无认证 · 无高可用 · 无联锁）
-  <span>│</span> <b>真传感器尚未接入</b>（等快递）：但已验证 <b>两类数据源</b>（自写仿真从站 + <b>CODESYS 软 PLC 真实运行时</b>）与 <b>ST/LD/FBD 三语言</b>（同一逻辑三处实现、同挂一个任务、在线同真同假）；<code>RtuModbusDriver</code> 已实现并<b>用虚拟串口实测通过</b>（25.6℃ / ABCD），到货只改 <code>comPort</code>
-  <span>│</span> <b>北向 MQTT 已通</b>：<code>iiot/{device}/{point}</code> · QoS 1 · retain，但没开认证（demo 用匿名）
-  <span>│</span> <b>告警只做判断不做通知</b>：引擎已实现并 A/B 验证，但短信/企微与同源合并未做
+  <span>│</span> <b>真传感器已接入</b>：艾克姆 IKM10000WS01 · COM7 · 9600-8N1 · 从站 1 · FC03 · <code>offset0=湿度 / offset1=温度</code>（×0.1）；当前 <b>22.5℃ / 75.8%RH</b>
+  <span>│</span> <b>PLC 是软 PLC</b>（CODESYS Control Win）：无硬实时、无电气隔离、无断电保持；但 <b>Modbus RTU 主站</b>与 <b>TCP 从站 1503</b> 都是真的
+  <span>│</span> <b>三菱只用仿真器</b>（GX Simulator2）验证 LD 逻辑 —— 它<b>没有对外通信口</b>，采不了数据，所以数据链路走 CODESYS
+  <span>│</span> <b>OPC UA 开了匿名</b>仅用于演示；生产须关匿名 + <code>Basic256Sha256</code> + 客户端证书 + 符号权限
   <span>│</span> 只有 4 个点位，够验证链路、不够覆盖真实产线
 </div>
 
 <footer>
-  <span><code>collector/</code> 采集端　<code>platform/</code> 只读平台　<code>docs/pitfalls.md</code> 十个坑的实测过程（本页摘 8 条）</span>
+  <span><code>collector/</code> 采集端　<code>platform/</code> 只读平台　<code>codesys/</code> PLC 工程　<code>docs/pitfalls.md</code> 坑的实测过程（本页摘 8 条）</span>
   <span>2026-10</span>
 </footer>
 
